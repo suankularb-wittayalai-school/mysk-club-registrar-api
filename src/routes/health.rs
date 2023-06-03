@@ -1,15 +1,13 @@
-mod structs;
+// mod structs;
+use rocket::serde::json::Json;
 
-use structs::*;
+use crate::structs::*;
 
-#[get("/")]
-pub fn get_index() -> common::ResponseType<health: HealthCheckResponse> {
-    let health_check_response = HealthCheckResponse {
-        response_time: "0.0001".to_string(),
-        database_connection: true,
-        database_response_time: "0.0002".to_string(),
-        memory_consumption: 0.0003,
-    };
+#[get("/health-check")]
+pub fn health_check() -> Json<common::ResponseType<health::HealthCheckResponse>> {
+    // get memory consumption in megabytes
+    let health_check_response = health::HealthCheckResponse::new(true, "0.0001".to_string());
+    let response = common::ResponseType::new(health_check_response, None, None);
 
-    common::ResponseType::new(health_check_response)
+    Json(response)
 }

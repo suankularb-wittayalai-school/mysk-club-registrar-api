@@ -1,9 +1,8 @@
 use chrono::{DateTime, Utc};
 use rocket::serde::{Deserialize, Serialize};
 
-mod common;
-
 #[derive(Serialize, Deserialize)]
+#[serde(crate = "rocket::serde")]
 pub struct ErrorType {
     id: String,
     error_type: String, // TODO: enum
@@ -12,6 +11,7 @@ pub struct ErrorType {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(crate = "rocket::serde")]
 pub struct PaginationType {
     first: String,
     last: String,
@@ -22,15 +22,30 @@ pub struct PaginationType {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(crate = "rocket::serde")]
 pub struct MetadataType {
     timestamp: DateTime<Utc>,
     pagination: PaginationType,
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(crate = "rocket::serde")]
 pub struct ResponseType<T> {
     api_version: String,
     data: Option<T>,
     error: Option<ErrorType>,
     meta: Option<MetadataType>,
+}
+
+impl<T> ResponseType<T> {
+    pub fn new(data: T, error: Option<ErrorType>, meta: Option<MetadataType>) -> Self {
+        let version = env!("CARGO_PKG_VERSION").to_string();
+
+        ResponseType {
+            api_version: version,
+            data: Some(data),
+            error,
+            meta,
+        }
+    }
 }
