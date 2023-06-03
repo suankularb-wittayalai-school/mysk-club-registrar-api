@@ -2,6 +2,7 @@
 extern crate rocket;
 
 mod routes;
+mod structs;
 use routes::index::*;
 
 #[rocket::main]
