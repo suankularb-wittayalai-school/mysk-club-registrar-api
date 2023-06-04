@@ -7,7 +7,6 @@ pub struct HealthCheckResponse {
     server_time: String,
     database_connection: bool,
     database_response_time: String,
-    memory_consumption: f32,
 }
 
 impl HealthCheckResponse {
@@ -19,7 +18,6 @@ impl HealthCheckResponse {
             database_connection,
             database_response_time,
             // memory_consumption: used_memory as f32 / 1024.0 / 1024.0,
-            memory_consumption: 0.0,
         }
     }
 }
