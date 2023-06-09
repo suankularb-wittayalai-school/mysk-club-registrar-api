@@ -11,6 +11,7 @@ mod utils;
 
 pub struct AppState {
     db: Pool<Postgres>,
+    jwt_secret: String,
 }
 
 
@@ -24,6 +25,8 @@ async fn main() -> std::io::Result<()>  {
 
     let database_url =
         env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let jwt_secret =
+        env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
     let pool = match PgPoolOptions::new()
         .max_connections(5)
@@ -40,9 +43,9 @@ async fn main() -> std::io::Result<()>  {
             }
         };
 
-        println!("🚀 Server started successfully");
+    println!("🚀 Server started successfully");
 
-        HttpServer::new(move || {
+    HttpServer::new(move || {
             let cors = Cors::default()
                 .allowed_origin("http://localhost:3000")
                 .allowed_methods(vec!["GET", "POST", "PATCH", "DELETE"])
@@ -53,7 +56,7 @@ async fn main() -> std::io::Result<()>  {
                 ])
                 .supports_credentials();
             App::new()
-                .app_data(web::Data::new(AppState { db: pool.clone() }))
+                .app_data(web::Data::new(AppState { db: pool.clone(), jwt_secret: jwt_secret.clone() }))
                 .configure(routes::config)
                 .wrap(cors)
                 .wrap(Logger::default())
