@@ -1,8 +1,7 @@
 // use crate::utils::memory::get_memory_usage;
-use rocket::serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
-#[serde(crate = "rocket::serde")]
 pub struct HealthCheckResponse {
     server_time: String,
     database_connection: bool,

@@ -1,7 +1,6 @@
-// #[macro_use]
-// extern crate rocket;
+use actix_web::{get, HttpResponse, Responder};
 
 #[get("/")]
-pub fn get_index() -> &'static str {
-    "Hello, world!"
+pub async fn get_index() -> impl Responder {
+    HttpResponse::Ok().body("Hello world!")
 }

@@ -1,15 +1,11 @@
-// mod structs;
-use rocket::serde::json::Json;
-use rocket::State;
+use actix_web::{get, web, HttpResponse, Responder};
 
-use sqlx::{Pool, Postgres};
-
+use crate::AppState;
 use crate::structs::*;
 
 #[get("/health-check")]
-pub async fn health_check(
-    pool: &State<Pool<Postgres>>,
-) -> Json<common::ResponseType<health::HealthCheckResponse>> {
+pub async fn health_check(data: web::Data<AppState>) -> impl Responder {
+    let pool = &data.db;
     let database_connection = match pool.acquire().await {
         Ok(_) => true,
         Err(_) => false,
@@ -18,10 +14,13 @@ pub async fn health_check(
     // calculate database response time
     let start = std::time::Instant::now();
 
-    let _ = sqlx::query("SELECT 1")
-        .execute(pool.inner())
+    let _ = match sqlx::query("SELECT 1")
+        .execute(pool)
         .await
-        .expect("Failed to execute query");
+        {
+            Ok(_) => true,
+            Err(_) => false,
+        };
 
     let database_response_time = start.elapsed().as_millis().to_string();
 
@@ -29,5 +28,5 @@ pub async fn health_check(
         health::HealthCheckResponse::new(database_connection, database_response_time);
     let response = common::ResponseType::new(health_check_response, None, None);
 
-    Json(response)
+    HttpResponse::Ok().json(response)
 }
