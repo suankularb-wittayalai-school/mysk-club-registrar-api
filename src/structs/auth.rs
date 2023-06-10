@@ -73,10 +73,8 @@ pub struct UserTable {
     pub is_admin: bool,
 }
 
-pub struct UserNotFoundError;
-
 impl UserTable {
-    async fn from_id(id: Uuid, db: &Pool<Postgres>) -> Result<UserTable, UserNotFoundError> {
+    async fn from_id(id: Uuid, db: &Pool<Postgres>) -> Result<UserTable, sqlx::Error> {
         let user = sqlx::query_as!(
             UserTable,
             r#"
@@ -90,7 +88,28 @@ impl UserTable {
         .await;
         match user {
             Ok(user) => Ok(user),
-            Err(_) => Err(UserNotFoundError),
+            Err(_) => Err(sqlx::Error::RowNotFound),
+        }
+    }
+
+    async fn from_student_id(
+        student_id: u32,
+        db: &Pool<Postgres>,
+    ) -> Result<UserTable, sqlx::Error> {
+        let user = sqlx::query_as!(
+            UserTable,
+            r#"
+            SELECT id, email, role, student, teacher, onboarded, is_admin
+            FROM users
+            WHERE student = $1
+            "#,
+            student_id as i64
+        )
+        .fetch_one(db)
+        .await;
+        match user {
+            Ok(user) => Ok(user),
+            Err(_) => Err(sqlx::Error::RowNotFound),
         }
     }
 }
@@ -117,6 +136,19 @@ impl User {
             onboarded: user.onboarded,
             is_admin: user.is_admin,
         }
+    }
+
+    pub async fn from_id(id: Uuid, db: &Pool<Postgres>) -> Result<User, sqlx::Error> {
+        let user = UserTable::from_id(id, db).await?;
+        Ok(User::new(user))
+    }
+
+    pub async fn from_student_id(
+        student_id: u32,
+        db: &Pool<Postgres>,
+    ) -> Result<User, sqlx::Error> {
+        let user = UserTable::from_student_id(student_id, db).await?;
+        Ok(User::new(user))
     }
 }
 
