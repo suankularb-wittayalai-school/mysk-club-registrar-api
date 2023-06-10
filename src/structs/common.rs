@@ -9,6 +9,17 @@ pub struct ErrorType {
     source: String,
 }
 
+impl ErrorType {
+    pub fn new(id: String, error_type: String, detail: String, source: String) -> Self {
+        ErrorType {
+            id,
+            error_type,
+            detail,
+            source,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct PaginationType {
     first: String,
