@@ -13,7 +13,7 @@ pub struct CompactClassroom {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Classroom {
+pub struct DefaultClassroom {
     pub id: u32,
     pub number: u32,
     pub room: String,
@@ -21,4 +21,11 @@ pub struct Classroom {
     pub students: Vec<String>,      // TODO: Change to Student
     pub contacts: Vec<String>,      // TODO: Change to Contact
     pub year: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Classroom {
+    Default(DefaultClassroom),
+    IdOnly(IdOnlyClassroom),
+    Compact(CompactClassroom),
 }

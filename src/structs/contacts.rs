@@ -66,7 +66,7 @@ impl<'de> Deserialize<'de> for ContactType {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Contact {
+pub struct DefaultContact {
     pub id: u32,
     pub name: MultiLangString,
     pub value: String,
@@ -87,4 +87,11 @@ pub struct CompactContact {
     pub name: MultiLangString,
     pub value: String,
     pub contact_type: ContactType,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Contact {
+    Default(DefaultContact),
+    IdOnly(IdOnlyContact),
+    Compact(CompactContact),
 }

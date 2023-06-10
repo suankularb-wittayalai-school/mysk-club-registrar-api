@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MultiLangString {
     #[serde(rename = "en-US")]
-    pub en: String,
+    pub en: Option<String>,
     pub th: String,
 }
 
