@@ -292,10 +292,10 @@ impl FromRequest for User {
 
         // use box pin to pin the future to the heap and get user asyncronously that will be used in the future
         Box::pin(async move {
-            let user_from_table = UserTable::from_id(user_id, &pool).await;
+            let user = User::from_id(user_id, &pool).await;
 
-            let user: User = match user_from_table {
-                Ok(user) => User::new(user),
+            match user {
+                Ok(user) => Ok(user),
                 Err(_) => {
                     return Err(ErrorNotFound(ErrorResponseType::new(
                         ErrorType {
@@ -308,9 +308,7 @@ impl FromRequest for User {
                         None,
                     )))
                 }
-            };
-
-            Ok(user)
+            }
         })
     }
 }

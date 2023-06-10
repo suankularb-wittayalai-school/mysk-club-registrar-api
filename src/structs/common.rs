@@ -12,6 +12,18 @@ pub struct MultiLangString {
     pub th: String,
 }
 
+impl std::fmt::Display for MultiLangString {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{{ en: {:?}, th: {} }}", self.en, self.th)
+    }
+}
+
+impl MultiLangString {
+    pub fn new(en: Option<String>, th: String) -> MultiLangString {
+        MultiLangString { en, th }
+    }
+}
+
 pub enum FetchLevel {
     Default,
     Compact,

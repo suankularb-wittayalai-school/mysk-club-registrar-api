@@ -208,7 +208,13 @@ pub struct DefaultStudent {
 }
 
 impl DefaultStudent {
-    pub async fn get_by_id(pool: &Pool<Postgres>, id: u32) -> Result<Self, sqlx::Error> {
+    pub async fn get_by_id(
+        pool: &Pool<Postgres>,
+        id: u32,
+        descendant_fetch_level: Option<FetchLevel>,
+    ) -> Result<Self, sqlx::Error> {
+        let descendant_fetch_level = descendant_fetch_level.unwrap_or(FetchLevel::IdOnly);
+
         let student = StudentTable::get_by_id(pool, id as i64).await?;
         let person = PeopleTable::get_by_id(pool, student.person).await?;
         let user = User::from_student_id(student.id as u32, pool).await?;
@@ -231,8 +237,13 @@ impl DefaultStudent {
                 th: person.last_name_th,
                 en: person.last_name_en,
             },
-            contacts: vec![], // TODO: get contacts based on decendent_fetch_level
-            class: None,      // TODO: get class based on decendent_fetch_level
+            contacts: Contact::get_from_ids(
+                pool,
+                person.contacts.unwrap_or(vec![]),
+                descendant_fetch_level,
+            )
+            .await?,
+            class: None, // TODO: get class based on decendent_fetch_level
             class_number: None,
             profile_url: person.profile,
             birthdate: person.birthdate,
@@ -267,16 +278,16 @@ impl Student {
         pool: &Pool<Postgres>,
         id: u32,
         level: Option<FetchLevel>,
-        decendent_fetch_level: Option<FetchLevel>,
+        descendant_fetch_level: Option<FetchLevel>,
     ) -> Result<Self, sqlx::Error> {
         match level {
             Some(FetchLevel::IdOnly) => Ok(Self::IdOnly(IdOnlyStudent::get_by_id(pool, id).await?)),
             Some(FetchLevel::Compact) => {
                 Ok(Self::Compact(CompactStudent::get_by_id(pool, id).await?))
             }
-            Some(FetchLevel::Default) | None => {
-                Ok(Self::Default(DefaultStudent::get_by_id(pool, id).await?))
-            }
+            Some(FetchLevel::Default) | None => Ok(Self::Default(
+                DefaultStudent::get_by_id(pool, id, descendant_fetch_level).await?,
+            )),
         }
     }
 }
@@ -317,7 +328,7 @@ impl FromRequest for Student {
 
                     match student {
                         Ok(student) => Ok(student),
-                        Err(e) => Err(ErrorUnauthorized(ErrorResponseType::new(
+                        Err(_) => Err(ErrorUnauthorized(ErrorResponseType::new(
                             ErrorType {
                                 id: "401".to_string(),
                                 detail: "User not a student".to_string(),
