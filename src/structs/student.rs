@@ -1,4 +1,5 @@
 use actix_web::error::{ErrorNotFound, ErrorUnauthorized};
+use actix_web::middleware::Logger;
 use actix_web::{dev::Payload, Error as ActixWebError};
 use actix_web::{web, FromRequest, HttpRequest};
 
@@ -8,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Postgres};
 
 use std::pin::Pin;
+use std::vec;
 
 use crate::structs::common::{ErrorResponseType, ErrorType};
 
@@ -19,6 +21,7 @@ use crate::structs::{
     common::{FetchLevel, MultiLangString},
     contacts::Contact,
 };
+use crate::utils::logger;
 
 use super::auth::UserRoles;
 
@@ -107,6 +110,20 @@ impl PeopleTable {
         .fetch_one(pool)
         .await
     }
+
+    async fn get_from_ids(pool: &Pool<Postgres>, ids: Vec<i64>) -> Result<Vec<Self>, sqlx::Error> {
+        sqlx::query_as!(
+            PeopleTable,
+            r#"
+            SELECT id, created_at, prefix_th, prefix_en, first_name_th, first_name_en, last_name_th, last_name_en, middle_name_th, middle_name_en, birthdate, citizen_id, contacts, profile, nickname_th, nickname_en, pants_size
+            FROM people
+            WHERE id = ANY($1)
+            "#,
+            &ids
+        )
+        .fetch_all(pool)
+        .await
+    }
 }
 
 #[derive(FromRow, Debug)]
@@ -131,6 +148,20 @@ impl StudentTable {
         .fetch_one(pool)
         .await
     }
+
+    async fn get_from_ids(pool: &Pool<Postgres>, ids: Vec<i64>) -> Result<Vec<Self>, sqlx::Error> {
+        sqlx::query_as!(
+            StudentTable,
+            r#"
+            SELECT id, created_at, std_id, person
+            FROM student
+            WHERE id = ANY($1)
+            "#,
+            &ids
+        )
+        .fetch_all(pool)
+        .await
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -145,6 +176,18 @@ impl IdOnlyStudent {
         Ok(Self {
             id: student.id as u32,
         })
+    }
+
+    pub async fn get_from_ids(
+        pool: &Pool<Postgres>,
+        ids: Vec<i64>,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let students = StudentTable::get_from_ids(pool, ids).await?;
+
+        Ok(students
+            .into_iter()
+            .map(|x| Self { id: x.id as u32 })
+            .collect())
     }
 }
 
@@ -187,6 +230,41 @@ impl CompactStudent {
             student_id: student.std_id.parse::<u32>().unwrap(),
         })
     }
+
+    pub async fn get_from_ids(
+        pool: &Pool<Postgres>,
+        ids: Vec<i64>,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let students = StudentTable::get_from_ids(pool, ids).await?;
+        let people = PeopleTable::get_from_ids(
+            pool,
+            students.iter().map(|x| x.person).collect::<Vec<i64>>(),
+        )
+        .await?;
+
+        Ok(students
+            .into_iter()
+            .zip(people.into_iter())
+            .map(|(student, person)| Self {
+                id: student.id as u32,
+                prefix: MultiLangString {
+                    th: person.prefix_th,
+                    en: person.prefix_en,
+                },
+                first_name: MultiLangString {
+                    th: person.first_name_th,
+                    en: person.first_name_en,
+                },
+                last_name: MultiLangString {
+                    th: person.last_name_th,
+                    en: person.last_name_en,
+                },
+                profile_url: person.profile,
+                birthdate: person.birthdate,
+                student_id: student.std_id.parse::<u32>().unwrap(),
+            })
+            .collect())
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -219,6 +297,20 @@ impl DefaultStudent {
         let person = PeopleTable::get_by_id(pool, student.person).await?;
         let user = User::from_student_id(student.id as u32, pool).await?;
 
+        let classroom = Classroom::get_by_student_id(
+            pool,
+            student.id as u32,
+            None,
+            descendant_fetch_level.clone(),
+            Some(FetchLevel::IdOnly),
+        )
+        .await?;
+
+        let class_number = match &classroom {
+            Some(_) => Classroom::get_class_no_by_student_id(pool, student.id as u32, None).await?,
+            None => None,
+        };
+
         Ok(Self {
             id: student.id as u32,
             prefix: MultiLangString {
@@ -243,13 +335,94 @@ impl DefaultStudent {
                 descendant_fetch_level,
             )
             .await?,
-            class: None, // TODO: get class based on decendent_fetch_level
-            class_number: None,
+            class: classroom, // TODO: get class based on descendant_fetch_level
+            class_number: class_number,
             profile_url: person.profile,
             birthdate: person.birthdate,
             student_id: student.std_id.parse::<u32>().unwrap(),
             user: user,
         })
+    }
+
+    pub async fn get_from_ids(
+        pool: &Pool<Postgres>,
+        ids: Vec<i64>,
+        descendant_fetch_level: Option<FetchLevel>,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let descendant_fetch_level = descendant_fetch_level.unwrap_or(FetchLevel::IdOnly);
+
+        let students = StudentTable::get_from_ids(pool, ids).await?;
+        let people = PeopleTable::get_from_ids(
+            pool,
+            students.iter().map(|x| x.person).collect::<Vec<i64>>(),
+        )
+        .await?;
+        let users = User::from_student_ids(
+            students.iter().map(|x| x.id as u32).collect::<Vec<u32>>(),
+            pool,
+        )
+        .await?;
+
+        // map student to user and person in a way that can use zip with async/await to fetch other data
+        let students = students
+            .into_iter()
+            .zip(users.into_iter())
+            .zip(people.into_iter())
+            .map(|((student, user), person)| (student, user, person))
+            .collect::<Vec<_>>();
+        let mut students_to_return = vec![];
+
+        for student in students {
+            let (student, user, person) = student;
+            // let classroom = Classroom::get_by_student_id(
+            //     pool,
+            //     student.id as u32,
+            //     None,
+            //     descendant_fetch_level.clone(),
+            //     Some(descendant_fetch_level.clone()),
+            // )
+            // .await?;
+
+            // let classroom_number = match &classroom {
+            //     Some(_) => {
+            //         Classroom::get_class_no_by_student_id(pool, student.id as u32, None).await?
+            //     }
+            //     None => None,
+            // };
+
+            students_to_return.push(Self {
+                id: student.id as u32,
+                prefix: MultiLangString {
+                    th: person.prefix_th,
+                    en: person.prefix_en,
+                },
+                first_name: MultiLangString {
+                    th: person.first_name_th,
+                    en: person.first_name_en,
+                },
+                middle_name: match (person.middle_name_th, person.middle_name_en) {
+                    (Some(th), Some(en)) => Some(MultiLangString { th, en: Some(en) }),
+                    _ => None,
+                },
+                last_name: MultiLangString {
+                    th: person.last_name_th,
+                    en: person.last_name_en,
+                },
+                contacts: Contact::get_from_ids(
+                    pool,
+                    person.contacts.unwrap_or(vec![]),
+                    descendant_fetch_level.clone(),
+                )
+                .await?,
+                class: None,
+                class_number: None,
+                profile_url: person.profile,
+                birthdate: person.birthdate,
+                student_id: student.std_id.parse::<u32>().unwrap(),
+                user: user,
+            });
+        }
+        Ok(students_to_return)
     }
 }
 
@@ -290,6 +463,40 @@ impl Student {
             )),
         }
     }
+
+    pub async fn get_from_ids(
+        pool: &Pool<Postgres>,
+        ids: Vec<i64>,
+        level: Option<FetchLevel>,
+        descendant_fetch_level: Option<FetchLevel>,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        match level {
+            Some(FetchLevel::IdOnly) => {
+                let res = IdOnlyStudent::get_from_ids(pool, ids).await?;
+                let mut students = vec![];
+                for student in res {
+                    students.push(Self::IdOnly(student));
+                }
+                Ok(students)
+            }
+            Some(FetchLevel::Compact) => {
+                let res = CompactStudent::get_from_ids(pool, ids).await?;
+                let mut students = vec![];
+                for student in res {
+                    students.push(Self::Compact(student));
+                }
+                Ok(students)
+            }
+            Some(FetchLevel::Default) | None => {
+                let res = DefaultStudent::get_from_ids(pool, ids, descendant_fetch_level).await?;
+                let mut students = vec![];
+                for student in res {
+                    students.push(Self::Default(student));
+                }
+                Ok(students)
+            }
+        }
+    }
 }
 
 impl FromRequest for Student {
@@ -328,11 +535,11 @@ impl FromRequest for Student {
 
                     match student {
                         Ok(student) => Ok(student),
-                        Err(_) => Err(ErrorUnauthorized(ErrorResponseType::new(
+                        Err(_) => Err(ErrorNotFound(ErrorResponseType::new(
                             ErrorType {
-                                id: "401".to_string(),
-                                detail: "User not a student".to_string(),
-                                code: 401,
+                                id: "404".to_string(),
+                                detail: "Field missing".to_string(),
+                                code: 404,
                                 error_type: "invalid_permission".to_string(),
                                 source: "".to_string(),
                             },

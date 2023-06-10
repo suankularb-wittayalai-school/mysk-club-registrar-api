@@ -24,6 +24,7 @@ impl MultiLangString {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum FetchLevel {
     Default,
     Compact,

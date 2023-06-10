@@ -112,6 +112,31 @@ impl UserTable {
             Err(_) => Err(sqlx::Error::RowNotFound),
         }
     }
+
+    async fn from_student_ids(
+        student_ids: Vec<u32>,
+        db: &Pool<Postgres>,
+    ) -> Result<Vec<UserTable>, sqlx::Error> {
+        let mut users = Vec::new();
+        for student_id in student_ids {
+            let user = sqlx::query_as!(
+                UserTable,
+                r#"
+                SELECT id, email, role, student, teacher, onboarded, is_admin
+                FROM users
+                WHERE student = $1
+                "#,
+                student_id as i64
+            )
+            .fetch_one(db)
+            .await;
+            match user {
+                Ok(user) => users.push(user),
+                Err(_) => (),
+            }
+        }
+        Ok(users)
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -155,6 +180,19 @@ impl User {
     ) -> Result<User, sqlx::Error> {
         let user = UserTable::from_student_id(student_id, db).await?;
         Ok(User::new(user))
+    }
+
+    pub async fn from_student_ids(
+        student_ids: Vec<u32>,
+        db: &Pool<Postgres>,
+    ) -> Result<Vec<User>, sqlx::Error> {
+        let users = UserTable::from_student_ids(student_ids, db).await?;
+        let mut users = users
+            .into_iter()
+            .map(|user| User::new(user))
+            .collect::<Vec<User>>();
+        users.sort_by(|a, b| a.student.unwrap().cmp(&b.student.unwrap()));
+        Ok(users)
     }
 }
 
