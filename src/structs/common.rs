@@ -12,6 +12,12 @@ pub struct MultiLangString {
     pub th: String,
 }
 
+pub enum FetchLevel {
+    Default,
+    Compact,
+    IdOnly,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ErrorType<T> {
     pub id: String,

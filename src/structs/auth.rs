@@ -119,8 +119,8 @@ pub struct User {
     pub id: Uuid,
     pub email: Option<String>,
     pub role: UserRoles,
-    pub student: Option<i64>,
-    pub teacher: Option<i64>,
+    pub student: Option<u32>,
+    pub teacher: Option<u32>,
     pub onboarded: bool,
     pub is_admin: bool,
 }
@@ -131,8 +131,14 @@ impl User {
             id: user.id,
             email: user.email,
             role: UserRoles::new(&user.role),
-            student: user.student,
-            teacher: user.teacher,
+            student: match user.student {
+                Some(student) => Some(student as u32),
+                None => None,
+            },
+            teacher: match user.teacher {
+                Some(teacher) => Some(teacher as u32),
+                None => None,
+            },
             onboarded: user.onboarded,
             is_admin: user.is_admin,
         }

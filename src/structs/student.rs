@@ -1,10 +1,26 @@
+use actix_web::error::{ErrorNotFound, ErrorUnauthorized};
+use actix_web::{dev::Payload, Error as ActixWebError};
+use actix_web::{web, FromRequest, HttpRequest};
+
 use chrono::{DateTime, NaiveDate, Utc};
+use futures::Future as FutureTrait;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Postgres};
 
+use std::pin::Pin;
+
+use crate::structs::common::{ErrorResponseType, ErrorType};
+
+use crate::AppState;
+
 use crate::structs::{
-    auth::User, classroom::Classroom, common::MultiLangString, contacts::Contact,
+    auth::User,
+    classroom::Classroom,
+    common::{FetchLevel, MultiLangString},
+    contacts::Contact,
 };
+
+use super::auth::UserRoles;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub enum Sex {
@@ -226,9 +242,106 @@ impl DefaultStudent {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub enum Student {
     Default(DefaultStudent),
     IdOnly(IdOnlyStudent),
     Compact(CompactStudent),
+}
+
+impl Serialize for Student {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        match self {
+            Student::Default(student) => student.serialize(serializer),
+            Student::IdOnly(student) => student.serialize(serializer),
+            Student::Compact(student) => student.serialize(serializer),
+        }
+    }
+}
+
+impl Student {
+    pub async fn get_by_id(
+        pool: &Pool<Postgres>,
+        id: u32,
+        level: Option<FetchLevel>,
+        decendent_fetch_level: Option<FetchLevel>,
+    ) -> Result<Self, sqlx::Error> {
+        match level {
+            Some(FetchLevel::IdOnly) => Ok(Self::IdOnly(IdOnlyStudent::get_by_id(pool, id).await?)),
+            Some(FetchLevel::Compact) => {
+                Ok(Self::Compact(CompactStudent::get_by_id(pool, id).await?))
+            }
+            Some(FetchLevel::Default) | None => {
+                Ok(Self::Default(DefaultStudent::get_by_id(pool, id).await?))
+            }
+        }
+    }
+}
+
+impl FromRequest for Student {
+    type Error = ActixWebError;
+    type Future = Pin<Box<dyn FutureTrait<Output = Result<Self, Self::Error>>>>;
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let pool = req.app_data::<web::Data<AppState>>().unwrap().db.clone();
+
+        // run normal user auth
+        let fut = User::from_request(req, _payload);
+
+        // then check if user is student
+        Box::pin(async move {
+            let user = fut.await?;
+
+            // check role
+            match user.role {
+                UserRoles::Student => {
+                    let student_id = match user.student {
+                        Some(id) => id,
+                        None => {
+                            return Err(ErrorNotFound(ErrorResponseType::new(
+                                ErrorType {
+                                    id: "404".to_string(),
+                                    detail: "Student ID not Found".to_string(),
+                                    code: 401,
+                                    error_type: "entity_not_found".to_string(),
+                                    source: "".to_string(),
+                                },
+                                None,
+                            )))
+                        }
+                    };
+
+                    let student = Student::get_by_id(&pool, student_id, None, None).await;
+
+                    match student {
+                        Ok(student) => Ok(student),
+                        Err(e) => Err(ErrorUnauthorized(ErrorResponseType::new(
+                            ErrorType {
+                                id: "401".to_string(),
+                                detail: "User not a student".to_string(),
+                                code: 401,
+                                error_type: "invalid_permission".to_string(),
+                                source: "".to_string(),
+                            },
+                            None,
+                        ))),
+                    }
+                }
+                _ => {
+                    return Err(ErrorUnauthorized(ErrorResponseType::new(
+                        ErrorType {
+                            id: "401".to_string(),
+                            detail: "User not a student".to_string(),
+                            code: 401,
+                            error_type: "invalid_permission".to_string(),
+                            source: "".to_string(),
+                        },
+                        None,
+                    )))
+                }
+            }
+        })
+    }
 }
