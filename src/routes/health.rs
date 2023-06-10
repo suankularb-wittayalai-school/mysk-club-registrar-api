@@ -27,7 +27,7 @@ pub async fn health_check(data: web::Data<AppState>) -> impl Responder {
     let health_check_response =
         health::HealthCheckResponse::new(database_connection, database_response_time);
     let response: ResponseType<HealthCheckResponse, _> =
-        common::ResponseType::new(health_check_response, None::<ErrorType>, None);
+        common::ResponseType::new(health_check_response, None::<ErrorType<String>>, None);
 
     HttpResponse::Ok().json(response)
 }

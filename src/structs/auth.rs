@@ -1,9 +1,8 @@
-use actix_web::error::ErrorUnauthorized;
+use actix_web::error::{ErrorNotFound, ErrorUnauthorized};
 use actix_web::{dev::Payload, Error as ActixWebError};
-use actix_web::{http, web, FromRequest, HttpMessage, HttpRequest};
+use actix_web::{http, web, FromRequest, HttpRequest};
 // use anyhow::Ok;
 use async_trait::async_trait;
-use futures::future::{ready, Ready};
 use futures::Future as FutureTrait;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
@@ -11,13 +10,12 @@ use sqlx::{FromRow, Pool, Postgres};
 use uuid::Uuid;
 
 use std::pin::Pin;
-use std::task::{Context, Poll};
 
 use crate::AppState;
 
-use crate::structs::common::{ErrorType, ResponseType};
+use crate::structs::common::{ErrorResponseType, ErrorType};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug)]
 pub enum UserRoles {
     Teacher,
     Student,
@@ -43,7 +41,25 @@ impl UserRoles {
     }
 }
 
-// implement serialization and deserialization for UserRoles
+// implement serialization and deserialization for UserRoles enum using from and to string
+impl Serialize for UserRoles {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        self.to_string().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for UserRoles {
+    fn deserialize<D>(deserializer: D) -> Result<UserRoles, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(UserRoles::from_string(&s))
+    }
+}
 
 #[derive(Debug, FromRow, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -162,9 +178,36 @@ impl FromRequest for User {
         let token = match auth_header {
             Some(token) => match token.to_str() {
                 Ok(token) => token,
-                Err(_) => return Box::pin(async { Err(ErrorUnauthorized("Invalid token")) }),
+                Err(_) => {
+                    return Box::pin(async {
+                        // return 401 unauthorized if the token is not a string as ResponseType
+                        Err(ErrorUnauthorized(ErrorResponseType::new(
+                            ErrorType {
+                                id: "401".to_string(),
+                                detail: "Invalid token".to_string(),
+                                code: 401,
+                                error_type: "invalid_token".to_string(),
+                                source: "".to_string(),
+                            },
+                            None,
+                        )))
+                    });
+                }
             },
-            None => return Box::pin(async { Err(ErrorUnauthorized("Missing Token")) }),
+            None => {
+                return Box::pin(async {
+                    Err(ErrorUnauthorized(ErrorResponseType::new(
+                        ErrorType {
+                            id: "401".to_string(),
+                            detail: "Missing Token".to_string(),
+                            code: 401,
+                            error_type: "missing_token".to_string(),
+                            source: "".to_string(),
+                        },
+                        None,
+                    )))
+                })
+            }
         };
 
         let token = token.replace("Bearer ", "");
@@ -175,12 +218,38 @@ impl FromRequest for User {
             &Validation::default(),
         ) {
             Ok(claims) => claims,
-            Err(_) => return Box::pin(async { Err(ErrorUnauthorized("Invalid token")) }),
+            Err(_) => {
+                return Box::pin(async {
+                    Err(ErrorUnauthorized(ErrorResponseType::new(
+                        ErrorType {
+                            id: "401".to_string(),
+                            detail: "Invalid token".to_string(),
+                            code: 401,
+                            error_type: "invalid_token".to_string(),
+                            source: "".to_string(),
+                        },
+                        None,
+                    )))
+                })
+            }
         };
 
         let user_id = match Uuid::parse_str(&claims.claims.sub) {
             Ok(user_id) => user_id,
-            Err(_) => return Box::pin(async { Err(ErrorUnauthorized("Invalid token")) }),
+            Err(_) => {
+                return Box::pin(async {
+                    Err(ErrorNotFound(ErrorResponseType::new(
+                        ErrorType {
+                            id: "404".to_string(),
+                            detail: "User not found".to_string(),
+                            code: 404,
+                            error_type: "entity_not_found".to_string(),
+                            source: "".to_string(),
+                        },
+                        None,
+                    )))
+                })
+            }
         };
 
         // use box pin to pin the future to the heap and get user asyncronously that will be used in the future
@@ -189,11 +258,21 @@ impl FromRequest for User {
 
             let user: User = match user_from_table {
                 Ok(user) => User::new(user),
-                Err(_) => return Err(ErrorUnauthorized("Invalid token")),
+                Err(_) => {
+                    return Err(ErrorNotFound(ErrorResponseType::new(
+                        ErrorType {
+                            id: "404".to_string(),
+                            detail: "User not found".to_string(),
+                            code: 404,
+                            error_type: "entity_not_found".to_string(),
+                            source: "".to_string(),
+                        },
+                        None,
+                    )))
+                }
             };
 
             Ok(user)
-            // todo!("handle user not found error")
         })
     }
 }
