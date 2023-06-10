@@ -6,6 +6,13 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct MultiLangString {
+    #[serde(rename = "en-US")]
+    pub en: String,
+    pub th: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ErrorType<T> {
     pub id: String,
     pub code: u32,
