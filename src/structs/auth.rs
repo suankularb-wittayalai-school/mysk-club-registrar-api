@@ -1,8 +1,11 @@
-use actix_web::dev::{Payload, ServiceRequest};
-use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Error};
+use actix_web::error::ErrorUnauthorized;
+use actix_web::{dev::Payload, Error as ActixWebError};
+use actix_web::{http, web, FromRequest, HttpMessage, HttpRequest};
+// use anyhow::Ok;
 use async_trait::async_trait;
 use futures::future::{ready, Ready};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use futures::Future as FutureTrait;
+use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Postgres};
 use uuid::Uuid;
@@ -10,10 +13,9 @@ use uuid::Uuid;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-
 use crate::AppState;
 
-use crate::structs::common::{ResponseType, ErrorType};
+use crate::structs::common::{ErrorType, ResponseType};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum UserRoles {
@@ -77,8 +79,41 @@ impl UserTable {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct User {
+    pub id: Uuid,
+    pub email: Option<String>,
+    pub role: UserRoles,
+    pub student: Option<i64>,
+    pub teacher: Option<i64>,
+    pub onboarded: bool,
+    pub is_admin: bool,
+}
+
+impl User {
+    pub fn new(user: UserTable) -> Self {
+        User {
+            id: user.id,
+            email: user.email,
+            role: UserRoles::new(&user.role),
+            student: user.student,
+            teacher: user.teacher,
+            onboarded: user.onboarded,
+            is_admin: user.is_admin,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct TokenClaim {
+    aud: String,
+    exp: i64,
+    sub: String,
+    email: String,
+}
+
 #[async_trait]
-impl FromRequest for UserTable {
+impl FromRequest for User {
     //  example jwt payload
     // {
     //     "aud": "authenticated",
@@ -111,11 +146,54 @@ impl FromRequest for UserTable {
 
     // if an error occurs, return the response type with the error and none T value
 
-
-    type Error = Error;
-    type Future = Ready<Result<Self, Self::Error>>;
+    type Error = ActixWebError;
+    type Future = Pin<Box<dyn FutureTrait<Output = Result<Self, Self::Error>>>>;
     // type Config = ();
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
-        todo!()
+        let pool = req.app_data::<web::Data<AppState>>().unwrap().db.clone();
+        let jwt_secret = req
+            .app_data::<web::Data<AppState>>()
+            .unwrap()
+            .jwt_secret
+            .clone();
+
+        let auth_header = req.headers().get(http::header::AUTHORIZATION);
+
+        let token = match auth_header {
+            Some(token) => match token.to_str() {
+                Ok(token) => token,
+                Err(_) => return Box::pin(async { Err(ErrorUnauthorized("Invalid token")) }),
+            },
+            None => return Box::pin(async { Err(ErrorUnauthorized("Missing Token")) }),
+        };
+
+        let token = token.replace("Bearer ", "");
+
+        let claims = match decode::<TokenClaim>(
+            &token,
+            &DecodingKey::from_secret(jwt_secret.as_bytes()),
+            &Validation::default(),
+        ) {
+            Ok(claims) => claims,
+            Err(_) => return Box::pin(async { Err(ErrorUnauthorized("Invalid token")) }),
+        };
+
+        let user_id = match Uuid::parse_str(&claims.claims.sub) {
+            Ok(user_id) => user_id,
+            Err(_) => return Box::pin(async { Err(ErrorUnauthorized("Invalid token")) }),
+        };
+
+        // use box pin to pin the future to the heap and get user asyncronously that will be used in the future
+        Box::pin(async move {
+            let user_from_table = UserTable::from_id(user_id, &pool).await;
+
+            let user: User = match user_from_table {
+                Ok(user) => User::new(user),
+                Err(_) => return Err(ErrorUnauthorized("Invalid token")),
+            };
+
+            Ok(user)
+            // todo!("handle user not found error")
+        })
     }
 }

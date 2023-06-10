@@ -37,15 +37,15 @@ pub struct MetadataType {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct ResponseType<T> {
+pub struct ResponseType<T, E = ErrorType> {
     api_version: String,
     data: Option<T>,
-    error: Option<ErrorType>,
+    error: Option<E>,
     meta: Option<MetadataType>,
 }
 
-impl<T> ResponseType<T> {
-    pub fn new(data: T, error: Option<ErrorType>, meta: Option<MetadataType>) -> Self {
+impl<T, E> ResponseType<T, E> {
+    pub fn new(data: T, error: Option<E>, meta: Option<MetadataType>) -> Self {
         let version = env!("CARGO_PKG_VERSION").to_string();
 
         ResponseType {
