@@ -1,7 +1,6 @@
 use actix_web::{
     error,
     http::{header::ContentType, StatusCode},
-    Result,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -16,22 +15,13 @@ pub struct ErrorType<T> {
 }
 
 impl<T> ErrorType<T> {
-    pub fn new(id: String, code: u32, error_type: T, detail: String, source: String) -> Self {
-        ErrorType {
-            id,
-            code,
-            error_type,
-            detail,
-            source,
-        }
-    }
-
     pub fn to_status_code(&self) -> StatusCode {
         match self.code {
             400 => StatusCode::BAD_REQUEST,
             401 => StatusCode::UNAUTHORIZED,
             403 => StatusCode::FORBIDDEN,
             404 => StatusCode::NOT_FOUND,
+            405 => StatusCode::METHOD_NOT_ALLOWED,
             500 => StatusCode::INTERNAL_SERVER_ERROR,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
