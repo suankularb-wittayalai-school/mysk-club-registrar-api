@@ -3,7 +3,7 @@ use actix_web::{
     http::{header::ContentType, StatusCode},
 };
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, __private::de};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MultiLangString {
@@ -25,10 +25,39 @@ impl MultiLangString {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
 pub enum FetchLevel {
     Default,
     Compact,
     IdOnly,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct FilterConfig<T> {
+    pub filter: Option<T>,
+    pub q: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SortingConfig {
+    // by is array of key of T as string
+    pub by: Option<Vec<String>>,
+    pub ascending: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PaginationConfig {
+    pub p: u32,
+    pub size: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RequestType<T> {
+    pub pagination: Option<PaginationConfig>,
+    pub filter: Option<FilterConfig<T>>,
+    pub sorting: Option<SortingConfig>,
+    pub fetch_level: Option<FetchLevel>,
+    pub descendant_fetch_level: Option<FetchLevel>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

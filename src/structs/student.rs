@@ -1,5 +1,4 @@
 use actix_web::error::{ErrorNotFound, ErrorUnauthorized};
-use actix_web::middleware::Logger;
 use actix_web::{dev::Payload, Error as ActixWebError};
 use actix_web::{web, FromRequest, HttpRequest};
 
@@ -21,7 +20,6 @@ use crate::structs::{
     common::{FetchLevel, MultiLangString},
     contacts::Contact,
 };
-use crate::utils::logger;
 
 use super::auth::UserRoles;
 

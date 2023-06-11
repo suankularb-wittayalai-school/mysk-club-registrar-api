@@ -8,12 +8,6 @@ use crate::utils::logger;
 
 use super::common::FetchLevel;
 
-struct ClassroomStudent {
-    pub classroom_id: i64,
-    pub student_id: i64,
-    pub classroom_number: i64,
-}
-
 #[derive(FromRow, Debug)]
 struct ClassroomTable {
     pub id: i64,
