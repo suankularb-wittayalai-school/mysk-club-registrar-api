@@ -1,10 +1,9 @@
 use actix_web::{get, web, HttpResponse, Responder};
-use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::structs::{
     clubs::Club,
-    common::{ErrorResponseType, ErrorType, FetchLevel, MetadataType, RequestType, ResponseType},
+    common::{ErrorResponseType, ErrorType, MetadataType, RequestType, ResponseType},
 };
 
 use crate::AppState;
