@@ -140,7 +140,7 @@ impl Decode<'_, Postgres> for SubmissionStatus {
     }
 }
 
-#[derive(FromRow, Debug)]
+#[derive(FromRow)]
 struct ClubTable {
     pub id: Uuid,
     pub created_at: Option<DateTime<Utc>>,
@@ -396,6 +396,16 @@ impl Club {
             FetchLevel::Default => Ok(Club::Default(
                 DefaultClub::get_by_id(pool, id, descendant_fetch_level).await?,
             )),
+        }
+    }
+}
+
+impl Serialize for Club {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Club::Default(c) => c.serialize(serializer),
+            Club::Compact(c) => c.serialize(serializer),
+            Club::IdOnly(c) => c.serialize(serializer),
         }
     }
 }
