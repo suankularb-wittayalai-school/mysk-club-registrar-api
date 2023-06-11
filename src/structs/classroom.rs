@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Postgres};
 
 use crate::structs::{contacts::Contact, student::Student};
-use crate::utils::date::getCurrentAcademicYear;
+use crate::utils::date::get_current_academic_year;
 use crate::utils::logger;
 
 use super::common::FetchLevel;
@@ -47,13 +47,8 @@ impl ClassroomTable {
     ) -> Result<Option<ClassroomTable>, sqlx::Error> {
         let year = match year {
             Some(year) => year,
-            None => getCurrentAcademicYear(),
+            None => get_current_academic_year(),
         };
-
-        logger::log(
-            logger::Header::INFO,
-            &format!("student id: {:?} year: {:?}", id, year),
-        );
 
         let classroom = sqlx::query_as!(
             ClassroomTable,
@@ -192,7 +187,7 @@ impl DefaultClassroom {
     ) -> Result<Option<DefaultClassroom>, sqlx::Error> {
         let year = match year {
             Some(year) => year,
-            None => getCurrentAcademicYear(),
+            None => get_current_academic_year(),
         };
 
         let classroom = ClassroomTable::get_by_student_id(pool, id, Some(year)).await?;
@@ -291,7 +286,7 @@ impl Classroom {
     ) -> Result<Option<u32>, sqlx::Error> {
         let year = match year {
             Some(year) => year,
-            None => getCurrentAcademicYear(),
+            None => get_current_academic_year(),
         };
 
         let classroom = ClassroomTable::get_by_student_id(pool, id, Some(year)).await?;

@@ -1,6 +1,6 @@
 use chrono::{Datelike, Utc};
 
-pub fn getCurrentAcademicYear() -> u32 {
+pub fn get_current_academic_year() -> u32 {
     let now = Utc::now();
     let month = now.month();
     let year = now.year();

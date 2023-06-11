@@ -44,10 +44,6 @@ impl ContactType {
             _ => ContactType::Other,
         }
     }
-
-    pub fn new(role: &str) -> ContactType {
-        self::ContactType::from_string(role)
-    }
 }
 
 impl sqlx::Type<sqlx::Postgres> for ContactType {
