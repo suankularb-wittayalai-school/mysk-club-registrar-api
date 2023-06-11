@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::utils::date::get_current_academic_year;
 
 use super::{
-    common::{FetchLevel, MultiLangString},
+    common::{FetchLevel, MultiLangString, RequestType},
     contacts::Contact,
     student::Student,
 };
@@ -173,6 +173,30 @@ impl ClubTable {
             Ok(club) => Ok(club),
             Err(e) => Err(e),
         }
+    }
+
+    pub async fn query(
+        pool: &sqlx::PgPool,
+        request: &RequestType<Self>, // TODO change Self to custom struct for queryable fields
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        // construct query string and parameters with request.filter
+        // request.filter.q is the search query
+        // request.filter.data is the filter data with type Self
+
+        let query_clause = r#"
+            SELECT clubs.id, clubs.created_at, name_th, name_en, description_th, description_en, main_room, logo_url, background_color, accent_color, house as "house: _", map_location
+            FROM clubs INNER JOIN organizations ON clubs.organization_id = organizations.id
+            "#;
+
+        let mut query = String::from(query_clause);
+
+        // let mut params: Vec<Box<dyn sqlx::Type>> = Vec::new();
+
+        // if sort is not empty, add ORDER BY clause and check the sort fields are valid
+
+        // do pagination by default with size = 50 and page = 1 if not specified
+
+        todo!()
     }
 
     pub async fn get_members(

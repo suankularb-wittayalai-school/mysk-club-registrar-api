@@ -34,7 +34,7 @@ pub enum FetchLevel {
 
 #[derive(Serialize, Deserialize)]
 pub struct FilterConfig<T> {
-    pub filter: Option<T>,
+    pub data: Option<T>,
     pub q: Option<String>,
 }
 
