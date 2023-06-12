@@ -3,7 +3,7 @@ use actix_web::{
     http::{header::ContentType, StatusCode},
 };
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize, __private::de};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MultiLangString {
@@ -32,30 +32,30 @@ pub enum FetchLevel {
     IdOnly,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FilterConfig<T> {
     pub data: Option<T>,
     pub q: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct SortingConfig {
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SortingConfig<T> {
     // by is array of key of T as string
-    pub by: Option<Vec<String>>,
+    pub by: Option<Vec<T>>,
     pub ascending: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PaginationConfig {
     pub p: u32,
     pub size: Option<u32>,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct RequestType<T> {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RequestType<Queryable, Sortable> {
     pub pagination: Option<PaginationConfig>,
-    pub filter: Option<FilterConfig<T>>,
-    pub sorting: Option<SortingConfig>,
+    pub filter: Option<FilterConfig<Queryable>>,
+    pub sorting: Option<SortingConfig<Sortable>>,
     pub fetch_level: Option<FetchLevel>,
     pub descendant_fetch_level: Option<FetchLevel>,
 }
