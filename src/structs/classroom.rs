@@ -4,7 +4,7 @@ use sqlx::{FromRow, Pool, Postgres};
 
 use crate::structs::{contacts::Contact, student::Student};
 use crate::utils::date::get_current_academic_year;
-use crate::utils::logger;
+// use crate::utils::logger;
 
 use super::common::FetchLevel;
 
@@ -58,7 +58,7 @@ impl ClassroomTable {
         match classroom {
             Ok(classroom) => Ok(classroom),
             Err(e) => {
-                logger::log(logger::Header::ERROR, &format!("{:?}", e));
+                // logger::log(logger::Header::ERROR, &format!("{:?}", e));
                 Err(e)
             }
         }

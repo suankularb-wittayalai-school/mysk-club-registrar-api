@@ -2,7 +2,7 @@ use actix_web::{get, web, HttpResponse, Responder};
 use uuid::Uuid;
 
 use crate::structs::{
-    clubs::Club,
+    clubs::{Club, ClubSortableField, QueryableClub},
     common::{ErrorResponseType, ErrorType, MetadataType, RequestType, ResponseType},
 };
 
@@ -17,7 +17,7 @@ use crate::AppState;
 pub async fn get_club_by_id(
     data: web::Data<AppState>,
     club_id: web::Path<Uuid>,
-    request_query: web::Query<RequestType<Club>>,
+    request_query: web::Query<RequestType<QueryableClub, ClubSortableField>>,
 ) -> impl Responder {
     let pool = &data.db;
     let club_id = club_id.into_inner();

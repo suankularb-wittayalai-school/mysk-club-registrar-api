@@ -1,9 +1,11 @@
+use std::vec;
+
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize, __private::de};
+use serde::{Deserialize, Serialize};
 use sqlx::{Decode, Encode, FromRow, Postgres, Type};
 use uuid::Uuid;
 
-use crate::utils::date::get_current_academic_year;
+use crate::{structs::common::PaginationConfig, utils::date::get_current_academic_year};
 
 use super::{
     common::{FetchLevel, MultiLangString, RequestType},
@@ -11,7 +13,7 @@ use super::{
     student::Student,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ActivityDayHouse {
     Felis,
     Cornicula,
@@ -140,6 +142,36 @@ impl Decode<'_, Postgres> for SubmissionStatus {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct QueryableClub {
+    pub id: Option<Uuid>,
+    pub name: Option<MultiLangString>,
+    pub description: Option<MultiLangString>,
+    pub main_room: Option<String>,
+    pub logo_url: Option<String>,
+    pub background_color: Option<String>,
+    pub accent_color: Option<String>,
+    pub house: Option<ActivityDayHouse>,
+    pub map_location: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum ClubSortableField {
+    Id,
+    CreatedAt,
+    NameTh,
+    NameEn,
+    DescriptionTh,
+    DescriptionEn,
+    MainRoom,
+    LogoUrl,
+    BackgroundColor,
+    AccentColor,
+    House,
+    MapLocation,
+}
+
 #[derive(FromRow)]
 struct ClubTable {
     pub id: Uuid,
@@ -177,26 +209,141 @@ impl ClubTable {
 
     pub async fn query(
         pool: &sqlx::PgPool,
-        request: &RequestType<Self>, // TODO change Self to custom struct for queryable fields
+        request: &RequestType<QueryableClub, ClubSortableField>,
     ) -> Result<Vec<Self>, sqlx::Error> {
         // construct query string and parameters with request.filter
         // request.filter.q is the search query
         // request.filter.data is the filter data with type Self
 
         let query_clause = r#"
-            SELECT clubs.id, clubs.created_at, name_th, name_en, description_th, description_en, main_room, logo_url, background_color, accent_color, house as "house: _", map_location
+            SELECT clubs.id, clubs.created_at, name_th, name_en, description_th, description_en, main_room, logo_url, background_color, accent_color, house, map_location
             FROM clubs INNER JOIN organizations ON clubs.organization_id = organizations.id
             "#;
 
         let mut query = String::from(query_clause);
+        let mut string_params = Vec::new();
+        let mut int_params = Vec::new();
 
-        // let mut params: Vec<Box<dyn sqlx::Type>> = Vec::new();
+        if let Some(filter) = &request.filter {
+            if let Some(q) = &filter.q {
+                query.push_str("WHERE name_th ILIKE $1 OR name_en ILIKE $1 OR description_th ILIKE $1 OR description_en ILIKE $1 OR main_room ILIKE $1");
+                string_params.push(format!("%{}%", q));
+            }
+
+            if let Some(data) = &filter.data {
+                if let Some(name) = &data.name {
+                    query.push_str("WHERE name_th ILIKE $1 OR name_en ILIKE $1");
+                    string_params.push(format!("%{}%", name));
+                }
+
+                if let Some(description) = &data.description {
+                    query.push_str("WHERE description_th ILIKE $1 OR description_en ILIKE $1");
+                    string_params.push(format!("%{}%", description));
+                }
+
+                if let Some(main_room) = &data.main_room {
+                    query.push_str("WHERE main_room ILIKE $1");
+                    string_params.push(format!("%{}%", main_room));
+                }
+
+                if let Some(logo_url) = &data.logo_url {
+                    query.push_str("WHERE logo_url ILIKE $1");
+                    string_params.push(format!("%{}%", logo_url));
+                }
+
+                if let Some(background_color) = &data.background_color {
+                    query.push_str("WHERE background_color ILIKE $1");
+                    string_params.push(format!("%{}%", background_color));
+                }
+
+                if let Some(accent_color) = &data.accent_color {
+                    query.push_str("WHERE accent_color ILIKE $1");
+                    string_params.push(format!("%{}%", accent_color));
+                }
+
+                if let Some(house) = &data.house {
+                    query.push_str("WHERE house = $1");
+                    string_params.push(house.to_string());
+                }
+
+                if let Some(map_location) = &data.map_location {
+                    query.push_str("WHERE map_location = $1");
+                    string_params.push(map_location.to_string());
+                }
+            }
+        }
 
         // if sort is not empty, add ORDER BY clause and check the sort fields are valid
+        if let Some(sort) = &request.sorting {
+            let sort = match sort.by.clone() {
+                Some(sort) => sort,
+                // return vector of id if sort.by is None
+                None => vec![ClubSortableField::Id],
+            };
 
+            if !sort.is_empty() {
+                query.push_str(" ORDER BY");
+
+                let mut first = true;
+                for s in sort {
+                    if !first {
+                        query.push_str(",");
+                    }
+
+                    match s {
+                        ClubSortableField::Id => query.push_str(" clubs.id"),
+                        ClubSortableField::CreatedAt => query.push_str(" clubs.created_at"),
+                        ClubSortableField::NameTh => query.push_str(" name_th"),
+                        ClubSortableField::NameEn => query.push_str(" name_en"),
+                        ClubSortableField::DescriptionTh => query.push_str(" description_th"),
+                        ClubSortableField::DescriptionEn => query.push_str(" description_en"),
+                        ClubSortableField::MainRoom => query.push_str(" main_room"),
+                        ClubSortableField::LogoUrl => query.push_str(" logo_url"),
+                        ClubSortableField::BackgroundColor => query.push_str(" background_color"),
+                        ClubSortableField::AccentColor => query.push_str(" accent_color"),
+                        ClubSortableField::House => query.push_str(" house"),
+                        ClubSortableField::MapLocation => query.push_str(" map_location"),
+                    }
+
+                    first = false;
+                }
+            }
+        }
         // do pagination by default with size = 50 and page = 1 if not specified
+        let pagination = match &request.pagination {
+            Some(pagination) => pagination,
+            None => &PaginationConfig {
+                size: Some(50),
+                p: 1,
+            },
+        };
 
-        todo!()
+        let size = pagination.size.unwrap_or(50);
+        let page = pagination.p;
+
+        query.push_str(" LIMIT $1 OFFSET $2");
+
+        int_params.push(size as i64);
+
+        int_params.push(((page - 1) * size) as i64);
+
+        println!("{} {:?} {:?}", query, string_params, int_params);
+
+        let mut res = sqlx::query_as::<_, Self>(&query);
+
+        for param in string_params {
+            res = res.bind(param);
+        }
+
+        for param in int_params {
+            res = res.bind(param);
+        }
+
+        let res = res.fetch_all(pool).await?;
+
+        // cause LIMIT to be a text[] instead of a bigint in the query
+
+        Ok(res)
     }
 
     pub async fn get_members(
@@ -308,6 +455,15 @@ impl IdOnlyClub {
 
         Ok(IdOnlyClub { id: res.id })
     }
+
+    pub async fn query(
+        pool: &sqlx::PgPool,
+        request: &RequestType<QueryableClub, ClubSortableField>,
+    ) -> Result<Vec<IdOnlyClub>, sqlx::Error> {
+        let res = ClubTable::query(pool, request).await?;
+
+        Ok(res.iter().map(|r| IdOnlyClub { id: r.id }).collect())
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -338,6 +494,31 @@ impl CompactClub {
             house: res.house,
             map_location: res.map_location.map(|l| l as u32),
         })
+    }
+
+    pub async fn query(
+        pool: &sqlx::PgPool,
+        request: &RequestType<QueryableClub, ClubSortableField>,
+    ) -> Result<Vec<CompactClub>, sqlx::Error> {
+        let res = ClubTable::query(pool, request).await?;
+
+        Ok(res
+            .iter()
+            .map(|r| CompactClub {
+                id: r.id,
+                name: MultiLangString {
+                    th: r.name_th.clone(),
+                    en: r.name_en.clone(),
+                },
+                description: match (r.description_th.clone(), r.description_en.clone()) {
+                    (Some(th), Some(en)) => Some(MultiLangString { th, en: Some(en) }),
+                    _ => None,
+                },
+                logo_url: r.logo_url.clone(),
+                house: r.house.clone(),
+                map_location: r.map_location.map(|l| l as u32),
+            })
+            .collect())
     }
 }
 
@@ -393,6 +574,52 @@ impl DefaultClub {
             map_location: res.map_location.map(|l| l as u32),
         })
     }
+
+    pub async fn query(
+        pool: &sqlx::PgPool,
+        request: &RequestType<QueryableClub, ClubSortableField>,
+        // descendant_fetch_level: Option<FetchLevel>,
+    ) -> Result<Vec<DefaultClub>, sqlx::Error> {
+        let res = ClubTable::query(pool, request).await?;
+
+        let descendant_fetch_level = request.descendant_fetch_level.clone();
+
+        let mut clubs = Vec::new();
+
+        for r in res.iter() {
+            let members =
+                ClubTable::get_members(pool, r.id, None, descendant_fetch_level.clone(), None)
+                    .await?;
+            let staffs =
+                ClubTable::get_staffs(pool, r.id, None, descendant_fetch_level.clone(), None)
+                    .await?;
+            let contacts =
+                ClubTable::get_contacts(pool, r.id, descendant_fetch_level.clone()).await?;
+
+            clubs.push(DefaultClub {
+                id: r.id,
+                name: MultiLangString {
+                    th: r.name_th.clone(),
+                    en: r.name_en.clone(),
+                },
+                description: match (r.description_th.clone(), r.description_en.clone()) {
+                    (Some(th), Some(en)) => Some(MultiLangString { th, en: Some(en) }),
+                    _ => None,
+                },
+                logo_url: r.logo_url.clone(),
+                staffs,
+                members,
+                background_color: r.background_color.clone(),
+                accent_color: r.accent_color.clone(),
+                contacts,
+                main_room: r.main_room.clone(),
+                house: r.house.clone(),
+                map_location: r.map_location.map(|l| l as u32),
+            });
+        }
+
+        Ok(clubs)
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -420,6 +647,34 @@ impl Club {
             FetchLevel::Default => Ok(Club::Default(
                 DefaultClub::get_by_id(pool, id, descendant_fetch_level).await?,
             )),
+        }
+    }
+
+    pub async fn query(
+        pool: &sqlx::PgPool,
+        request: &RequestType<QueryableClub, ClubSortableField>,
+    ) -> Result<Vec<Club>, sqlx::Error> {
+        let fetch_level = match &request.fetch_level {
+            Some(fetch_level) => fetch_level,
+            None => &FetchLevel::Default,
+        };
+
+        match fetch_level {
+            FetchLevel::IdOnly => Ok(IdOnlyClub::query(pool, request)
+                .await?
+                .into_iter()
+                .map(|c| Club::IdOnly(c))
+                .collect()),
+            FetchLevel::Compact => Ok(CompactClub::query(pool, request)
+                .await?
+                .into_iter()
+                .map(|c| Club::Compact(c))
+                .collect()),
+            FetchLevel::Default => Ok(DefaultClub::query(pool, request)
+                .await?
+                .into_iter()
+                .map(|c| Club::Default(c))
+                .collect()),
         }
     }
 }
