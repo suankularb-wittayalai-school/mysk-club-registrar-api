@@ -16,11 +16,11 @@ pub async fn query_clubs(
 ) -> impl Responder {
     let pool = &data.db;
 
-    let request_query = serde_qs::from_str::<RequestType<QueryableClub, ClubSortableField>>(
+    let request_query = serde_qs::from_str::<RequestType<Club, QueryableClub, ClubSortableField>>(
         &request.query_string(),
     );
 
-    let request_query: RequestType<QueryableClub, ClubSortableField> = match request_query {
+    let request_query = match request_query {
         Ok(request_query) => request_query,
         Err(e) => {
             let response: ErrorResponseType = ErrorResponseType::new(

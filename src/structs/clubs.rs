@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::{structs::common::PaginationConfig, utils::date::get_current_academic_year};
 
 use super::{
-    common::{FetchLevel, MultiLangString, RequestType},
+    common::{FetchLevel, FlexibleMultiLangString, MultiLangString, RequestType},
     contacts::Contact,
     student::Student,
 };
@@ -156,11 +156,23 @@ pub struct QueryableClub {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct UpdatableClub {
+pub struct UpdatableClubTable {
     pub name_th: Option<String>,
     pub name_en: Option<String>,
     pub description_th: Option<String>,
     pub description_en: Option<String>,
+    pub main_room: Option<String>,
+    pub logo_url: Option<String>,
+    pub background_color: Option<String>,
+    pub accent_color: Option<String>,
+    pub house: Option<ActivityDayHouse>,
+    pub map_location: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UpdatableClub {
+    pub name: Option<MultiLangString>,
+    pub description: Option<FlexibleMultiLangString>,
     pub main_room: Option<String>,
     pub logo_url: Option<String>,
     pub background_color: Option<String>,
@@ -224,110 +236,163 @@ impl ClubTable {
     pub async fn update_by_id(
         pool: &sqlx::PgPool,
         id: Uuid,
-        club: &UpdatableClub,
+        club: &UpdatableClubTable,
     ) -> Result<Self, sqlx::Error> {
-        let query_clause = r#"
-            UPDATE clubs
-            SET
-            "#;
+        // construct 2 queries
+        // 1. update clubs table
+        // 2. update organizations table
+        // while making sure that the queries have to be ran because it might leave a SET clause with no fields to update
+        // make sure to use the same transaction
+        // only the colors, house, and map_location are in the clubs table
+        // the rest are in the organizations table
 
+        let mut update_query = String::from("UPDATE clubs SET ");
         let mut query_counts = 1;
 
-        let mut query = String::from(query_clause);
         let mut string_params = Vec::new();
         let mut house_params = Vec::new();
         let mut int_params = Vec::new();
 
-        if let Some(name_th) = &club.name_th {
-            query.push_str(&format!("name_th = ${}", query_counts));
-            query_counts += 1;
-            string_params.push(name_th);
-        }
-
-        if let Some(name_en) = &club.name_en {
-            query.push_str(&format!(", name_en = ${}", query_counts));
-            query_counts += 1;
-            string_params.push(name_en);
-        }
-
-        if let Some(description_th) = &club.description_th {
-            query.push_str(&format!(", description_th = ${}", query_counts));
-            query_counts += 1;
-            string_params.push(description_th);
-        }
-
-        if let Some(description_en) = &club.description_en {
-            query.push_str(&format!(", description_en = ${}", query_counts));
-            query_counts += 1;
-            string_params.push(description_en);
-        }
-
-        if let Some(main_room) = &club.main_room {
-            query.push_str(&format!(", main_room = ${}", query_counts));
-            query_counts += 1;
-            string_params.push(main_room);
-        }
-
-        if let Some(logo_url) = &club.logo_url {
-            query.push_str(&format!(", logo_url = ${}", query_counts));
-            query_counts += 1;
-            string_params.push(logo_url);
-        }
-
         if let Some(background_color) = &club.background_color {
-            query.push_str(&format!(", background_color = ${}", query_counts));
+            update_query.push_str(&format!("background_color = ${}, ", query_counts));
             query_counts += 1;
             string_params.push(background_color);
         }
 
         if let Some(accent_color) = &club.accent_color {
-            query.push_str(&format!(", accent_color = ${}", query_counts));
+            update_query.push_str(&format!("accent_color = ${}, ", query_counts));
             query_counts += 1;
             string_params.push(accent_color);
         }
 
         if let Some(house) = &club.house {
-            query.push_str(&format!(", house = ${}", query_counts));
+            update_query.push_str(&format!("house = ${}, ", query_counts));
             query_counts += 1;
             house_params.push(house);
         }
 
         if let Some(map_location) = &club.map_location {
-            query.push_str(&format!(", map_location = ${}", query_counts));
+            update_query.push_str(&format!("map_location = ${}, ", query_counts));
             query_counts += 1;
             int_params.push(map_location);
         }
 
-        query.push_str(&format!(" WHERE id = ${}", query_counts));
-        // int_params.push(&id);
+        update_query.pop();
+        update_query.pop();
 
-        let mut res = sqlx::query_as::<_, Self>(&query);
+        update_query.push_str(&format!(" WHERE id = ${query_counts}"));
 
-        for param in string_params {
-            res = res.bind(param);
+        let mut update_organization_query = String::from("UPDATE organizations SET ");
+        let mut query_counts = 1;
+
+        let mut organization_string_params = Vec::new();
+
+        if let Some(name_th) = &club.name_th {
+            update_organization_query.push_str(&format!("name_th = ${}, ", query_counts));
+            query_counts += 1;
+            organization_string_params.push(name_th);
         }
 
-        for param in house_params {
-            res = res.bind(param);
+        if let Some(name_en) = &club.name_en {
+            update_organization_query.push_str(&format!("name_en = ${}, ", query_counts));
+            query_counts += 1;
+            organization_string_params.push(name_en);
         }
 
-        for param in int_params {
-            res = res.bind(param);
+        if let Some(description_th) = &club.description_th {
+            update_organization_query.push_str(&format!("description_th = ${}, ", query_counts));
+            query_counts += 1;
+            organization_string_params.push(description_th);
         }
 
-        res = res.bind(id);
-
-        let res = res.fetch_one(pool).await;
-
-        match res {
-            Ok(club) => Ok(club),
-            Err(e) => Err(e),
+        if let Some(description_en) = &club.description_en {
+            update_organization_query.push_str(&format!("description_en = ${}, ", query_counts));
+            query_counts += 1;
+            organization_string_params.push(description_en);
         }
+
+        if let Some(main_room) = &club.main_room {
+            update_organization_query.push_str(&format!("main_room = ${}, ", query_counts));
+            query_counts += 1;
+            organization_string_params.push(main_room);
+        }
+
+        update_organization_query.pop();
+        update_organization_query.pop();
+
+        update_organization_query.push_str(&format!(" WHERE id = ${query_counts}"));
+
+        let mut transaction = pool.begin().await?;
+
+        // dbg!(
+        //     &update_query,
+        //     &string_params,
+        //     &house_params,
+        //     &int_params,
+        //     &update_organization_query,
+        //     &organization_string_params
+        // );
+
+        // check if the query actually updated anything by checking if there is SET WHERE clause in the query
+        // if there is SET WHERE directly after each other, then it means that there is no fields to update which mean to not run the query
+
+        if !update_query.contains("SE WHERE") {
+            let mut club_update_res = sqlx::query(&update_query);
+
+            for param in string_params {
+                club_update_res = club_update_res.bind(param);
+            }
+
+            for param in house_params {
+                club_update_res = club_update_res.bind(param);
+            }
+
+            for param in int_params {
+                club_update_res = club_update_res.bind(param);
+            }
+
+            club_update_res = club_update_res.bind(id);
+
+            let _ = club_update_res.execute(&mut transaction).await?;
+
+            // if club_update_res.rows_affected() == 0 {
+            //     return Err(sqlx::Error::RowNotFound);
+            // }
+        }
+
+        if !update_organization_query.contains("SE WHERE") {
+            let organization_id = sqlx::query!(
+                r#"
+            SELECT organization_id
+            FROM clubs
+            WHERE id = $1
+            "#,
+                id
+            )
+            .fetch_one(&mut transaction)
+            .await?;
+
+            let organization_id = organization_id.organization_id;
+
+            let mut res = sqlx::query(&update_organization_query);
+
+            for param in organization_string_params {
+                res = res.bind(param);
+            }
+
+            res = res.bind(organization_id);
+
+            let _ = res.execute(&mut transaction).await?;
+        }
+
+        transaction.commit().await?;
+
+        Ok(Self::get_by_id(pool, id).await?)
     }
 
     pub async fn query(
         pool: &sqlx::PgPool,
-        request: &RequestType<QueryableClub, ClubSortableField>,
+        request: &RequestType<Club, QueryableClub, ClubSortableField>,
     ) -> Result<Vec<Self>, sqlx::Error> {
         // construct query string and parameters with request.filter
         // request.filter.q is the search query
@@ -647,7 +712,7 @@ impl IdOnlyClub {
 
     pub async fn query(
         pool: &sqlx::PgPool,
-        request: &RequestType<QueryableClub, ClubSortableField>,
+        request: &RequestType<Club, QueryableClub, ClubSortableField>,
     ) -> Result<Vec<IdOnlyClub>, sqlx::Error> {
         let res = ClubTable::query(pool, request).await?;
 
@@ -704,7 +769,7 @@ impl CompactClub {
 
     pub async fn query(
         pool: &sqlx::PgPool,
-        request: &RequestType<QueryableClub, ClubSortableField>,
+        request: &RequestType<Club, QueryableClub, ClubSortableField>,
     ) -> Result<Vec<CompactClub>, sqlx::Error> {
         let res = ClubTable::query(pool, request).await?;
 
@@ -819,7 +884,7 @@ impl DefaultClub {
 
     pub async fn query(
         pool: &sqlx::PgPool,
-        request: &RequestType<QueryableClub, ClubSortableField>,
+        request: &RequestType<Club, QueryableClub, ClubSortableField>,
         // descendant_fetch_level: Option<FetchLevel>,
     ) -> Result<Vec<DefaultClub>, sqlx::Error> {
         let res = ClubTable::query(pool, request).await?;
@@ -917,14 +982,52 @@ impl Club {
         pool: &sqlx::PgPool,
         id: Uuid,
         update: &UpdatableClub,
+        fetch_level: Option<FetchLevel>,
+        descendant_fetch_level: Option<FetchLevel>,
     ) -> Result<Club, sqlx::Error> {
-        let res = ClubTable::update_by_id(pool, id, update).await?;
+        let fetch_level = match fetch_level {
+            Some(fetch_level) => fetch_level,
+            None => FetchLevel::Default,
+        };
 
-        Ok(Club::from_table(pool, res, FetchLevel::Default, None).await?)
+        let update = UpdatableClubTable {
+            name_th: match &update.name {
+                Some(name) => Some(name.th.clone()),
+                None => None,
+            },
+            name_en: match &update.name {
+                Some(name) => name.en.clone(),
+                None => None,
+            },
+            description_th: match &update.description {
+                Some(description) => match &description.th {
+                    Some(th) => Some(th.clone()),
+                    None => None,
+                },
+                None => None,
+            },
+            description_en: match &update.description {
+                Some(description) => match &description.en {
+                    Some(en) => Some(en.clone()),
+                    None => None,
+                },
+                None => None,
+            },
+            logo_url: update.logo_url.clone(),
+            background_color: update.background_color.clone(),
+            accent_color: update.accent_color.clone(),
+            main_room: update.main_room.clone(),
+            house: update.house.clone(),
+            map_location: update.map_location,
+        };
+
+        let res = ClubTable::update_by_id(pool, id, &update).await?;
+
+        Ok(Club::from_table(pool, res, fetch_level, descendant_fetch_level).await?)
     }
     pub async fn query(
         pool: &sqlx::PgPool,
-        request: &RequestType<QueryableClub, ClubSortableField>,
+        request: &RequestType<Club, QueryableClub, ClubSortableField>,
     ) -> Result<Vec<Club>, sqlx::Error> {
         let fetch_level = match &request.fetch_level {
             Some(fetch_level) => fetch_level,

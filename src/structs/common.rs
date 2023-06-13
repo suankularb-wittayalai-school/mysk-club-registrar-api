@@ -12,6 +12,13 @@ pub struct MultiLangString {
     pub th: String,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct FlexibleMultiLangString {
+    #[serde(rename = "en-US")]
+    pub en: Option<String>,
+    pub th: Option<String>,
+}
+
 impl std::fmt::Display for MultiLangString {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{{ en: {:?}, th: {} }}", self.en, self.th)
@@ -52,7 +59,8 @@ pub struct PaginationConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct RequestType<Queryable, Sortable> {
+pub struct RequestType<T, Queryable, Sortable> {
+    pub data: Option<T>,
     pub pagination: Option<PaginationConfig>,
     pub filter: Option<FilterConfig<Queryable>>,
     pub sorting: Option<SortingConfig<Sortable>>,
