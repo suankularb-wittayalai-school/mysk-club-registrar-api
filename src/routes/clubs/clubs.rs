@@ -38,7 +38,7 @@ pub async fn query_clubs(
         }
     };
 
-    println!("{:?}", request_query);
+    // println!("{:?}", request_query);
 
     // to fetch with query params
     // and use nested json query params

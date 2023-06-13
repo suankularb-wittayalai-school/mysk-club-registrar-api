@@ -155,6 +155,20 @@ pub struct QueryableClub {
     pub map_location: Option<i64>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UpdatableClub {
+    pub name_th: Option<String>,
+    pub name_en: Option<String>,
+    pub description_th: Option<String>,
+    pub description_en: Option<String>,
+    pub main_room: Option<String>,
+    pub logo_url: Option<String>,
+    pub background_color: Option<String>,
+    pub accent_color: Option<String>,
+    pub house: Option<ActivityDayHouse>,
+    pub map_location: Option<i64>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ClubSortableField {
@@ -200,6 +214,110 @@ impl ClubTable {
             id
         ).fetch_one(pool)
         .await;
+
+        match res {
+            Ok(club) => Ok(club),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub async fn update_by_id(
+        pool: &sqlx::PgPool,
+        id: Uuid,
+        club: &UpdatableClub,
+    ) -> Result<Self, sqlx::Error> {
+        let query_clause = r#"
+            UPDATE clubs
+            SET
+            "#;
+
+        let mut query_counts = 1;
+
+        let mut query = String::from(query_clause);
+        let mut string_params = Vec::new();
+        let mut house_params = Vec::new();
+        let mut int_params = Vec::new();
+
+        if let Some(name_th) = &club.name_th {
+            query.push_str(&format!("name_th = ${}", query_counts));
+            query_counts += 1;
+            string_params.push(name_th);
+        }
+
+        if let Some(name_en) = &club.name_en {
+            query.push_str(&format!(", name_en = ${}", query_counts));
+            query_counts += 1;
+            string_params.push(name_en);
+        }
+
+        if let Some(description_th) = &club.description_th {
+            query.push_str(&format!(", description_th = ${}", query_counts));
+            query_counts += 1;
+            string_params.push(description_th);
+        }
+
+        if let Some(description_en) = &club.description_en {
+            query.push_str(&format!(", description_en = ${}", query_counts));
+            query_counts += 1;
+            string_params.push(description_en);
+        }
+
+        if let Some(main_room) = &club.main_room {
+            query.push_str(&format!(", main_room = ${}", query_counts));
+            query_counts += 1;
+            string_params.push(main_room);
+        }
+
+        if let Some(logo_url) = &club.logo_url {
+            query.push_str(&format!(", logo_url = ${}", query_counts));
+            query_counts += 1;
+            string_params.push(logo_url);
+        }
+
+        if let Some(background_color) = &club.background_color {
+            query.push_str(&format!(", background_color = ${}", query_counts));
+            query_counts += 1;
+            string_params.push(background_color);
+        }
+
+        if let Some(accent_color) = &club.accent_color {
+            query.push_str(&format!(", accent_color = ${}", query_counts));
+            query_counts += 1;
+            string_params.push(accent_color);
+        }
+
+        if let Some(house) = &club.house {
+            query.push_str(&format!(", house = ${}", query_counts));
+            query_counts += 1;
+            house_params.push(house);
+        }
+
+        if let Some(map_location) = &club.map_location {
+            query.push_str(&format!(", map_location = ${}", query_counts));
+            query_counts += 1;
+            int_params.push(map_location);
+        }
+
+        query.push_str(&format!(" WHERE id = ${}", query_counts));
+        // int_params.push(&id);
+
+        let mut res = sqlx::query_as::<_, Self>(&query);
+
+        for param in string_params {
+            res = res.bind(param);
+        }
+
+        for param in house_params {
+            res = res.bind(param);
+        }
+
+        for param in int_params {
+            res = res.bind(param);
+        }
+
+        res = res.bind(id);
+
+        let res = res.fetch_one(pool).await;
 
         match res {
             Ok(club) => Ok(club),
@@ -387,10 +505,10 @@ impl ClubTable {
 
         int_params.push(((page - 1) * size) as i64);
 
-        println!(
-            "{} {:?} {:?} {:?}",
-            query, string_params, house_params, int_params
-        );
+        // println!(
+        //     "{} {:?} {:?} {:?}",
+        //     query, string_params, house_params, int_params
+        // );
 
         let mut res = sqlx::query_as::<_, Self>(&query);
 
@@ -517,6 +635,10 @@ pub struct IdOnlyClub {
 }
 
 impl IdOnlyClub {
+    fn from_table(club: ClubTable) -> Self {
+        Self { id: club.id }
+    }
+
     pub async fn get_by_id(pool: &sqlx::PgPool, id: Uuid) -> Result<IdOnlyClub, sqlx::Error> {
         let res = ClubTable::get_by_id(pool, id).await?;
 
@@ -544,6 +666,23 @@ pub struct CompactClub {
 }
 
 impl CompactClub {
+    fn from_table(club: ClubTable) -> Self {
+        Self {
+            id: club.id,
+            name: MultiLangString {
+                th: club.name_th,
+                en: club.name_en,
+            },
+            description: match (club.description_th, club.description_en) {
+                (Some(th), Some(en)) => Some(MultiLangString { th, en: Some(en) }),
+                _ => None,
+            },
+            logo_url: club.logo_url,
+            house: club.house,
+            map_location: club.map_location.map(|l| l as u32),
+        }
+    }
+
     pub async fn get_by_id(pool: &sqlx::PgPool, id: Uuid) -> Result<CompactClub, sqlx::Error> {
         let res = ClubTable::get_by_id(pool, id).await?;
 
@@ -607,6 +746,42 @@ pub struct DefaultClub {
 }
 
 impl DefaultClub {
+    async fn from_table(
+        pool: &sqlx::PgPool,
+        club: ClubTable,
+        descendant_fetch_level: Option<FetchLevel>,
+    ) -> Result<Self, sqlx::Error> {
+        let members =
+            ClubTable::get_members(pool, club.id, None, descendant_fetch_level.clone(), None)
+                .await?;
+        let staffs =
+            ClubTable::get_staffs(pool, club.id, None, descendant_fetch_level.clone(), None)
+                .await?;
+        let contacts = ClubTable::get_contacts(pool, club.id, descendant_fetch_level).await?;
+
+        Ok(Self {
+            id: club.id,
+            name: MultiLangString {
+                th: club.name_th,
+                en: club.name_en,
+            },
+            description: match (club.description_th, club.description_en) {
+                (Some(th), Some(en)) => Some(MultiLangString { th, en: Some(en) }),
+                _ => None,
+            },
+            logo_url: club.logo_url,
+            staffs,
+            members,
+            // advisors: vec![],
+            background_color: club.background_color,
+            accent_color: club.accent_color,
+            contacts,
+            main_room: club.main_room,
+            house: club.house,
+            map_location: club.map_location.map(|l| l as u32),
+        })
+    }
+
     pub async fn get_by_id(
         pool: &sqlx::PgPool,
         id: Uuid,
@@ -697,6 +872,27 @@ pub enum Club {
 }
 
 impl Club {
+    async fn from_table(
+        pool: &sqlx::PgPool,
+        club: ClubTable,
+        fetch_level: FetchLevel,
+        descendant_fetch_level: Option<FetchLevel>,
+    ) -> Result<Self, sqlx::Error> {
+        let fetch_level = match fetch_level {
+            FetchLevel::IdOnly => FetchLevel::IdOnly,
+            FetchLevel::Compact => FetchLevel::Compact,
+            FetchLevel::Default => FetchLevel::Default,
+        };
+
+        match fetch_level {
+            FetchLevel::IdOnly => Ok(Club::IdOnly(IdOnlyClub::from_table(club))),
+            FetchLevel::Compact => Ok(Club::Compact(CompactClub::from_table(club))),
+            FetchLevel::Default => Ok(Club::Default(
+                DefaultClub::from_table(pool, club, descendant_fetch_level).await?,
+            )),
+        }
+    }
+
     pub async fn get_by_id(
         pool: &sqlx::PgPool,
         id: Uuid,
@@ -717,6 +913,15 @@ impl Club {
         }
     }
 
+    pub async fn update_by_id(
+        pool: &sqlx::PgPool,
+        id: Uuid,
+        update: &UpdatableClub,
+    ) -> Result<Club, sqlx::Error> {
+        let res = ClubTable::update_by_id(pool, id, update).await?;
+
+        Ok(Club::from_table(pool, res, FetchLevel::Default, None).await?)
+    }
     pub async fn query(
         pool: &sqlx::PgPool,
         request: &RequestType<QueryableClub, ClubSortableField>,
