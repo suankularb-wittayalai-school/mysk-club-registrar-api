@@ -13,7 +13,7 @@ use super::{
     student::Student,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum ActivityDayHouse {
     Felis,
     Cornicula,
@@ -145,8 +145,8 @@ impl Decode<'_, Postgres> for SubmissionStatus {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct QueryableClub {
     pub id: Option<Uuid>,
-    pub name: Option<MultiLangString>,
-    pub description: Option<MultiLangString>,
+    pub name: Option<String>,
+    pub description: Option<String>,
     pub main_room: Option<String>,
     pub logo_url: Option<String>,
     pub background_color: Option<String>,
@@ -220,72 +220,123 @@ impl ClubTable {
             FROM clubs INNER JOIN organizations ON clubs.organization_id = organizations.id
             "#;
 
+        let mut query_counts = 1;
+
         let mut query = String::from(query_clause);
         let mut string_params = Vec::new();
+        let mut house_params = Vec::new();
         let mut int_params = Vec::new();
 
         if let Some(filter) = &request.filter {
             if let Some(q) = &filter.q {
-                query.push_str("WHERE name_th ILIKE $1 OR name_en ILIKE $1 OR description_th ILIKE $1 OR description_en ILIKE $1 OR main_room ILIKE $1");
+                query.push_str(&format!("WHERE name_th ILIKE ${query_counts} OR name_en ILIKE ${query_counts} OR description_th ILIKE ${query_counts} OR description_en ILIKE ${query_counts} OR main_room ILIKE ${query_counts}"));
                 string_params.push(format!("%{}%", q));
+                query_counts += 1;
             }
 
             if let Some(data) = &filter.data {
                 if let Some(name) = &data.name {
-                    query.push_str("WHERE name_th ILIKE $1 OR name_en ILIKE $1");
+                    query.push_str(&format!(
+                        "WHERE (name_th ILIKE ${query_counts} OR name_en ILIKE ${query_counts})"
+                    ));
                     string_params.push(format!("%{}%", name));
+                    query_counts += 1;
                 }
 
                 if let Some(description) = &data.description {
-                    query.push_str("WHERE description_th ILIKE $1 OR description_en ILIKE $1");
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(
+                            " AND (description_th ILIKE ${query_counts} OR description_en ILIKE ${query_counts})"
+                        ));
+                    } else {
+                        query.push_str(&format!(
+                            "WHERE (description_th ILIKE ${query_counts} OR description_en ILIKE ${query_counts})"
+                        ));
+                    }
                     string_params.push(format!("%{}%", description));
+                    query_counts += 1;
                 }
 
                 if let Some(main_room) = &data.main_room {
-                    query.push_str("WHERE main_room ILIKE $1");
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(" AND main_room ILIKE ${query_counts}"));
+                    } else {
+                        query.push_str(&format!("WHERE main_room ILIKE ${query_counts}"));
+                    }
+
                     string_params.push(format!("%{}%", main_room));
+                    query_counts += 1;
                 }
 
                 if let Some(logo_url) = &data.logo_url {
-                    query.push_str("WHERE logo_url ILIKE $1");
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(" AND logo_url ILIKE ${query_counts}"));
+                    } else {
+                        query.push_str(&format!("WHERE logo_url ILIKE ${query_counts}"));
+                    }
                     string_params.push(format!("%{}%", logo_url));
+                    query_counts += 1;
                 }
 
                 if let Some(background_color) = &data.background_color {
-                    query.push_str("WHERE background_color ILIKE $1");
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(" AND background_color ILIKE ${query_counts}"));
+                    } else {
+                        query.push_str(&format!("WHERE background_color ILIKE ${query_counts}"));
+                    }
+
                     string_params.push(format!("%{}%", background_color));
+                    query_counts += 1;
                 }
 
                 if let Some(accent_color) = &data.accent_color {
-                    query.push_str("WHERE accent_color ILIKE $1");
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(" AND accent_color ILIKE ${query_counts}"));
+                    } else {
+                        query.push_str(&format!("WHERE accent_color ILIKE ${query_counts}"));
+                    }
+
                     string_params.push(format!("%{}%", accent_color));
+                    query_counts += 1;
                 }
 
                 if let Some(house) = &data.house {
-                    query.push_str("WHERE house = $1");
-                    string_params.push(house.to_string());
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(" AND house = ${query_counts}"));
+                    } else {
+                        query.push_str(&format!("WHERE house = ${query_counts}"));
+                    }
+
+                    house_params.push(*house);
+                    query_counts += 1;
                 }
 
                 if let Some(map_location) = &data.map_location {
-                    query.push_str("WHERE map_location = $1");
-                    string_params.push(map_location.to_string());
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(" AND map_location = ${query_counts}"));
+                    } else {
+                        query.push_str(&format!("WHERE map_location = ${query_counts}"));
+                    }
+
+                    int_params.push(*map_location);
+                    query_counts += 1;
                 }
             }
         }
 
         // if sort is not empty, add ORDER BY clause and check the sort fields are valid
         if let Some(sort) = &request.sorting {
-            let sort = match sort.by.clone() {
+            let sort_vec = match sort.by.clone() {
                 Some(sort) => sort,
                 // return vector of id if sort.by is None
                 None => vec![ClubSortableField::Id],
             };
 
-            if !sort.is_empty() {
+            if !sort_vec.is_empty() {
                 query.push_str(" ORDER BY");
 
                 let mut first = true;
-                for s in sort {
+                for s in sort_vec {
                     if !first {
                         query.push_str(",");
                     }
@@ -307,6 +358,13 @@ impl ClubTable {
 
                     first = false;
                 }
+
+                // check if it is ascending or descending
+                if sort.ascending {
+                    query.push_str(" ASC");
+                } else {
+                    query.push_str(" DESC");
+                }
             }
         }
         // do pagination by default with size = 50 and page = 1 if not specified
@@ -321,17 +379,26 @@ impl ClubTable {
         let size = pagination.size.unwrap_or(50);
         let page = pagination.p;
 
-        query.push_str(" LIMIT $1 OFFSET $2");
+        let next_count = query_counts + 1;
+
+        query.push_str(&format!(" LIMIT ${query_counts} OFFSET ${next_count}",));
 
         int_params.push(size as i64);
 
         int_params.push(((page - 1) * size) as i64);
 
-        println!("{} {:?} {:?}", query, string_params, int_params);
+        println!(
+            "{} {:?} {:?} {:?}",
+            query, string_params, house_params, int_params
+        );
 
         let mut res = sqlx::query_as::<_, Self>(&query);
 
         for param in string_params {
+            res = res.bind(param);
+        }
+
+        for param in house_params {
             res = res.bind(param);
         }
 

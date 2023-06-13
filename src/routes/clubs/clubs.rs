@@ -1,4 +1,5 @@
-use actix_web::{get, web, HttpResponse, Responder};
+use actix_web::{get, web, HttpRequest, HttpResponse, Responder};
+use serde_qs;
 use uuid::Uuid;
 
 use crate::structs::{
@@ -11,9 +12,31 @@ use crate::AppState;
 #[get("/clubs")]
 pub async fn query_clubs(
     data: web::Data<AppState>,
-    request_query: web::Query<RequestType<QueryableClub, ClubSortableField>>,
+    request: HttpRequest, // request_query: web::Query<RequestType<QueryableClub, ClubSortableField>>,
 ) -> impl Responder {
     let pool = &data.db;
+
+    let request_query = serde_qs::from_str::<RequestType<QueryableClub, ClubSortableField>>(
+        &request.query_string(),
+    );
+
+    let request_query: RequestType<QueryableClub, ClubSortableField> = match request_query {
+        Ok(request_query) => request_query,
+        Err(e) => {
+            let response: ErrorResponseType = ErrorResponseType::new(
+                ErrorType {
+                    id: Uuid::new_v4().to_string(),
+                    code: 400,
+                    error_type: "bad_request".to_string(),
+                    detail: e.to_string(),
+                    source: "/clubs".to_string(),
+                },
+                None::<MetadataType>,
+            );
+
+            return HttpResponse::BadRequest().json(response);
+        }
+    };
 
     println!("{:?}", request_query);
 

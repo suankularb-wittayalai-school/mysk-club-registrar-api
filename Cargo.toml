@@ -27,5 +27,7 @@ futures = "0.3.17"
 derive_more = "0.99.11"
 log= "0.4.14"
 colored = "2.0.0"
+serde_qs= "0.12.0"
+
 
 
