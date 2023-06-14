@@ -9,11 +9,6 @@ use crate::structs::{
 
 use crate::AppState;
 
-// #[derive(Deserialize)]
-// pub struct ClubDetailPath {
-//     club_id: Uuid,
-// }
-
 #[get("/clubs/{club_id}")]
 pub async fn get_club_by_id(
     data: web::Data<AppState>,
