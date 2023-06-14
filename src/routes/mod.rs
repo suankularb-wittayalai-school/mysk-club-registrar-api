@@ -70,6 +70,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(clubs::club_detail::get_club_by_id);
     cfg.service(clubs::club_detail::update_club_by_id);
     cfg.service(clubs::clubs::query_clubs);
+    cfg.service(clubs::club_contact::create_contact_for_club);
     cfg.service(
         SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", ApiDoc::openapi()),
     );

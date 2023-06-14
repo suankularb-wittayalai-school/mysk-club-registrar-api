@@ -22,14 +22,14 @@ pub enum ContactType {
 impl ContactType {
     pub fn to_string(&self) -> String {
         match self {
-            ContactType::Phone => "phone".to_string(),
-            ContactType::Email => "email".to_string(),
-            ContactType::Facebook => "facebook".to_string(),
-            ContactType::Line => "line".to_string(),
-            ContactType::Instagram => "instagram".to_string(),
-            ContactType::Website => "website".to_string(),
-            ContactType::Discord => "discord".to_string(),
-            ContactType::Other => "other".to_string(),
+            ContactType::Phone => "Phone".to_string(),
+            ContactType::Email => "Email".to_string(),
+            ContactType::Facebook => "Facebook".to_string(),
+            ContactType::Line => "Line".to_string(),
+            ContactType::Instagram => "Instagram".to_string(),
+            ContactType::Website => "Website".to_string(),
+            ContactType::Discord => "Discord".to_string(),
+            ContactType::Other => "Other".to_string(),
         }
     }
     pub fn from_string(role: &str) -> ContactType {
@@ -93,7 +93,7 @@ impl<'de> Deserialize<'de> for ContactType {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CreateContact {
-    pub name: FlexibleMultiLangString,
+    pub name: Option<FlexibleMultiLangString>,
     pub value: String,
     pub contact_type: ContactType,
     pub include_students: Option<bool>,
@@ -157,8 +157,14 @@ impl ContactTable {
             INSERT INTO contacts (name_th, name_en, value, type, include_students, include_teachers, include_parents)
             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
             "#,
-            contact.name.th,
-            contact.name.en,
+            match &contact.name {
+                Some(name) => name.th.clone(),
+                None => None,
+            },
+            match &contact.name {
+                Some(name) => name.en.clone(),
+                None => None,
+            },
             contact.value,
             contact.contact_type as ContactType,
             contact.include_students,
