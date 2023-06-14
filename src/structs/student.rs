@@ -7,6 +7,9 @@ use futures::Future as FutureTrait;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Postgres};
 
+use utoipa::openapi::schema;
+use utoipa::{IntoParams, ToSchema};
+
 use std::pin::Pin;
 use std::vec;
 
@@ -162,7 +165,7 @@ impl StudentTable {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, ToSchema)]
 pub struct IdOnlyStudent {
     pub id: u32,
 }
@@ -189,7 +192,7 @@ impl IdOnlyStudent {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, ToSchema)]
 pub struct CompactStudent {
     pub id: u32,
     pub prefix: MultiLangString,
@@ -197,6 +200,7 @@ pub struct CompactStudent {
     pub last_name: MultiLangString,
     // pub middle_name: Option<MultiLangString>,
     pub profile_url: Option<String>,
+    #[schema(value_type = String, example = "2022-01-22")]
     pub birthdate: NaiveDate,
     // pub sex: Sex,
     // pub blood_group: Option<bloodType>,
@@ -265,7 +269,7 @@ impl CompactStudent {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, ToSchema)]
 pub struct DefaultStudent {
     pub id: u32,
     pub prefix: MultiLangString,
@@ -273,6 +277,7 @@ pub struct DefaultStudent {
     pub last_name: MultiLangString,
     pub middle_name: Option<MultiLangString>,
     pub profile_url: Option<String>,
+    #[schema(value_type = String, example = "2022-01-22")]
     pub birthdate: NaiveDate,
     // pub sex: Sex,
     // pub blood_group: Option<BloodType>,
@@ -424,7 +429,7 @@ impl DefaultStudent {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 pub enum Student {
     Default(DefaultStudent),
     IdOnly(IdOnlyStudent),

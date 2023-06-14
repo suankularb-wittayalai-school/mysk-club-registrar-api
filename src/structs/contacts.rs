@@ -1,12 +1,13 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 
 use crate::structs::common::MultiLangString;
 
 use super::common::FetchLevel;
 
-#[derive(Debug)]
+#[derive(Debug, ToSchema)]
 pub enum ContactType {
     Phone,
     Email,
@@ -138,7 +139,7 @@ impl ContactTable {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct DefaultContact {
     pub id: u32,
     pub name: MultiLangString,
@@ -187,7 +188,7 @@ impl DefaultContact {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct IdOnlyContact {
     pub id: u32,
 }
@@ -213,7 +214,7 @@ impl IdOnlyContact {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct CompactContact {
     pub id: u32,
     pub name: MultiLangString,
@@ -253,7 +254,7 @@ impl CompactContact {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 pub enum Contact {
     Default(DefaultContact),
     IdOnly(IdOnlyContact),

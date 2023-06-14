@@ -3,6 +3,7 @@ use std::vec;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{Decode, Encode, FromRow, Postgres, Type};
+use utoipa::{openapi::schema, ToSchema};
 use uuid::Uuid;
 
 use crate::{structs::common::PaginationConfig, utils::date::get_current_academic_year};
@@ -13,7 +14,7 @@ use super::{
     student::Student,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, ToSchema)]
 pub enum ActivityDayHouse {
     Felis,
     Cornicula,
@@ -694,8 +695,9 @@ impl ClubTable {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, ToSchema)]
 pub struct IdOnlyClub {
+    #[schema(value_type = String)]
     pub id: Uuid,
 }
 
@@ -720,8 +722,9 @@ impl IdOnlyClub {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, ToSchema)]
 pub struct CompactClub {
+    #[schema(value_type = String)]
     pub id: Uuid,
     pub name: MultiLangString,
     pub description: Option<MultiLangString>,
@@ -793,8 +796,9 @@ impl CompactClub {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, ToSchema)]
 pub struct DefaultClub {
+    #[schema(value_type = String)]
     pub id: Uuid,
     pub name: MultiLangString,
     pub description: Option<MultiLangString>,
@@ -929,7 +933,7 @@ impl DefaultClub {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 pub enum Club {
     Default(DefaultClub),
     Compact(CompactClub),

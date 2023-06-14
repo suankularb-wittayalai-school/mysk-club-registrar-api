@@ -1,7 +1,8 @@
 // use crate::utils::memory::get_memory_usage;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct HealthCheckResponse {
     server_time: String,
     database_connection: bool,

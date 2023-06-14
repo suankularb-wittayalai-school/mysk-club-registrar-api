@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Postgres};
+use utoipa::ToSchema;
 
 use crate::structs::{contacts::Contact, student::Student};
 use crate::utils::date::get_current_academic_year;
@@ -65,7 +66,7 @@ impl ClassroomTable {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct IdOnlyClassroom {
     pub id: u32,
 }
@@ -93,7 +94,7 @@ impl IdOnlyClassroom {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct CompactClassroom {
     pub id: u32,
     pub number: u32,
@@ -130,7 +131,7 @@ impl CompactClassroom {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct DefaultClassroom {
     pub id: u32,
     pub number: u32,
@@ -215,7 +216,7 @@ impl DefaultClassroom {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 pub enum Classroom {
     Default(DefaultClassroom),
     IdOnly(IdOnlyClassroom),
