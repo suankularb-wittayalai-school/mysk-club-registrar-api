@@ -5,7 +5,72 @@ use actix_web::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+use utoipa::{IntoParams, ToSchema};
+
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
+pub struct MultiLangString {
+    #[serde(rename = "en-US")]
+    pub en: Option<String>,
+    pub th: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
+pub struct FlexibleMultiLangString {
+    #[serde(rename = "en-US")]
+    pub en: Option<String>,
+    pub th: Option<String>,
+}
+
+impl std::fmt::Display for MultiLangString {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{{ en: {:?}, th: {} }}", self.en, self.th)
+    }
+}
+
+impl MultiLangString {
+    pub fn new(en: Option<String>, th: String) -> MultiLangString {
+        MultiLangString { en, th }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FetchLevel {
+    Default,
+    Compact,
+    IdOnly,
+}
+
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
+pub struct FilterConfig<T> {
+    pub data: Option<T>,
+    pub q: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, ToSchema)]
+pub struct SortingConfig<T> {
+    // by is array of key of T as string
+    pub by: Option<Vec<T>>,
+    pub ascending: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
+pub struct PaginationConfig {
+    pub p: u32,
+    pub size: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
+pub struct RequestType<T, Queryable, Sortable> {
+    pub data: Option<T>,
+    pub pagination: Option<PaginationConfig>,
+    pub filter: Option<FilterConfig<Queryable>>,
+    pub sorting: Option<SortingConfig<Sortable>>,
+    pub fetch_level: Option<FetchLevel>,
+    pub descendant_fetch_level: Option<FetchLevel>,
+}
+
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct ErrorType<T> {
     pub id: String,
     pub code: u32,
@@ -44,7 +109,7 @@ impl std::error::Error for ErrorType<String> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct PaginationType {
     first: String,
     last: String,
@@ -63,7 +128,7 @@ impl std::fmt::Display for PaginationType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct MetadataType {
     timestamp: DateTime<Utc>,
     pagination: PaginationType,
@@ -79,7 +144,7 @@ impl std::fmt::Display for MetadataType {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct ResponseType<T, E = ErrorType<String>> {
     api_version: String,
     data: Option<T>,
@@ -100,7 +165,7 @@ impl<T, E> ResponseType<T, E> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct ErrorResponseType {
     api_version: String,
     error: ErrorType<String>,

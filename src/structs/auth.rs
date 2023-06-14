@@ -7,6 +7,8 @@ use futures::Future as FutureTrait;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Postgres};
+use utoipa::openapi::schema;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use std::pin::Pin;
@@ -15,7 +17,7 @@ use crate::AppState;
 
 use crate::structs::common::{ErrorResponseType, ErrorType};
 
-#[derive(Debug)]
+#[derive(Debug, ToSchema)]
 pub enum UserRoles {
     Teacher,
     Student,
@@ -73,10 +75,8 @@ pub struct UserTable {
     pub is_admin: bool,
 }
 
-pub struct UserNotFoundError;
-
 impl UserTable {
-    async fn from_id(id: Uuid, db: &Pool<Postgres>) -> Result<UserTable, UserNotFoundError> {
+    async fn from_id(id: Uuid, db: &Pool<Postgres>) -> Result<UserTable, sqlx::Error> {
         let user = sqlx::query_as!(
             UserTable,
             r#"
@@ -90,18 +90,65 @@ impl UserTable {
         .await;
         match user {
             Ok(user) => Ok(user),
-            Err(_) => Err(UserNotFoundError),
+            Err(_) => Err(sqlx::Error::RowNotFound),
         }
+    }
+
+    async fn from_student_id(
+        student_id: u32,
+        db: &Pool<Postgres>,
+    ) -> Result<UserTable, sqlx::Error> {
+        let user = sqlx::query_as!(
+            UserTable,
+            r#"
+            SELECT id, email, role, student, teacher, onboarded, is_admin
+            FROM users
+            WHERE student = $1
+            "#,
+            student_id as i64
+        )
+        .fetch_one(db)
+        .await;
+        match user {
+            Ok(user) => Ok(user),
+            Err(_) => Err(sqlx::Error::RowNotFound),
+        }
+    }
+
+    async fn from_student_ids(
+        student_ids: Vec<u32>,
+        db: &Pool<Postgres>,
+    ) -> Result<Vec<UserTable>, sqlx::Error> {
+        let mut users = Vec::new();
+        for student_id in student_ids {
+            let user = sqlx::query_as!(
+                UserTable,
+                r#"
+                SELECT id, email, role, student, teacher, onboarded, is_admin
+                FROM users
+                WHERE student = $1
+                "#,
+                student_id as i64
+            )
+            .fetch_one(db)
+            .await;
+            match user {
+                Ok(user) => users.push(user),
+                Err(_) => (),
+            }
+        }
+        Ok(users)
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct User {
+    #[schema(value_type=String)]
     pub id: Uuid,
     pub email: Option<String>,
     pub role: UserRoles,
-    pub student: Option<i64>,
-    pub teacher: Option<i64>,
+    pub student: Option<u32>,
+    pub teacher: Option<u32>,
     pub onboarded: bool,
     pub is_admin: bool,
 }
@@ -112,11 +159,43 @@ impl User {
             id: user.id,
             email: user.email,
             role: UserRoles::new(&user.role),
-            student: user.student,
-            teacher: user.teacher,
+            student: match user.student {
+                Some(student) => Some(student as u32),
+                None => None,
+            },
+            teacher: match user.teacher {
+                Some(teacher) => Some(teacher as u32),
+                None => None,
+            },
             onboarded: user.onboarded,
             is_admin: user.is_admin,
         }
+    }
+
+    pub async fn from_id(id: Uuid, db: &Pool<Postgres>) -> Result<User, sqlx::Error> {
+        let user = UserTable::from_id(id, db).await?;
+        Ok(User::new(user))
+    }
+
+    pub async fn from_student_id(
+        student_id: u32,
+        db: &Pool<Postgres>,
+    ) -> Result<User, sqlx::Error> {
+        let user = UserTable::from_student_id(student_id, db).await?;
+        Ok(User::new(user))
+    }
+
+    pub async fn from_student_ids(
+        student_ids: Vec<u32>,
+        db: &Pool<Postgres>,
+    ) -> Result<Vec<User>, sqlx::Error> {
+        let users = UserTable::from_student_ids(student_ids, db).await?;
+        let mut users = users
+            .into_iter()
+            .map(|user| User::new(user))
+            .collect::<Vec<User>>();
+        users.sort_by(|a, b| a.student.unwrap().cmp(&b.student.unwrap()));
+        Ok(users)
     }
 }
 
@@ -254,10 +333,10 @@ impl FromRequest for User {
 
         // use box pin to pin the future to the heap and get user asyncronously that will be used in the future
         Box::pin(async move {
-            let user_from_table = UserTable::from_id(user_id, &pool).await;
+            let user = User::from_id(user_id, &pool).await;
 
-            let user: User = match user_from_table {
-                Ok(user) => User::new(user),
+            match user {
+                Ok(user) => Ok(user),
                 Err(_) => {
                     return Err(ErrorNotFound(ErrorResponseType::new(
                         ErrorType {
@@ -270,9 +349,7 @@ impl FromRequest for User {
                         None,
                     )))
                 }
-            };
-
-            Ok(user)
+            }
         })
     }
 }
