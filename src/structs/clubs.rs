@@ -3,13 +3,13 @@ use std::vec;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{Decode, Encode, FromRow, Postgres, Type};
-use utoipa::{openapi::schema, ToSchema};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{structs::common::PaginationConfig, utils::date::get_current_academic_year};
 
 use super::{
-    common::{FetchLevel, FlexibleMultiLangString, MultiLangString, RequestType},
+    common::{FetchLevel, FlexibleMultiLangString, MultiLangString, PaginationType, RequestType},
     contacts::Contact,
     student::Student,
 };
@@ -154,6 +154,7 @@ pub struct QueryableClub {
     pub accent_color: Option<String>,
     pub house: Option<ActivityDayHouse>,
     pub map_location: Option<i64>,
+    pub staffs: Option<Vec<i64>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -232,6 +233,210 @@ impl ClubTable {
             Ok(club) => Ok(club),
             Err(e) => Err(e),
         }
+    }
+
+    // A function to construct query string from request params
+    // the function will return a tuple of (query string, query params)
+    fn construct_query_string(
+        request_params: &RequestType<Club, QueryableClub, ClubSortableField>,
+    ) -> (String, Vec<String>, Vec<ActivityDayHouse>, Vec<i64>) {
+        let request = request_params;
+
+        let query_clause = r#"
+            SELECT clubs.id, clubs.created_at, name_th, name_en, description_th, description_en, main_room, logo_url, background_color, accent_color, house, map_location
+            FROM clubs INNER JOIN organizations ON clubs.organization_id = organizations.id
+            "#;
+
+        let mut query_counts = 1;
+
+        let mut query = String::from(query_clause);
+        let mut string_params = Vec::new();
+        let mut house_params = Vec::new();
+        let mut int_params = Vec::new();
+
+        if let Some(filter) = &request.filter {
+            if let Some(q) = &filter.q {
+                query.push_str(&format!("WHERE name_th ILIKE ${query_counts} OR name_en ILIKE ${query_counts} OR description_th ILIKE ${query_counts} OR description_en ILIKE ${query_counts} OR main_room ILIKE ${query_counts}"));
+                string_params.push(format!("%{}%", q));
+                query_counts += 1;
+            }
+
+            if let Some(data) = &filter.data {
+                if let Some(name) = &data.name {
+                    query.push_str(&format!(
+                        "WHERE (name_th ILIKE ${query_counts} OR name_en ILIKE ${query_counts})"
+                    ));
+                    string_params.push(format!("%{}%", name));
+                    query_counts += 1;
+                }
+
+                if let Some(description) = &data.description {
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(
+                            " AND (description_th ILIKE ${query_counts} OR description_en ILIKE ${query_counts})"
+                        ));
+                    } else {
+                        query.push_str(&format!(
+                            "WHERE (description_th ILIKE ${query_counts} OR description_en ILIKE ${query_counts})"
+                        ));
+                    }
+                    string_params.push(format!("%{}%", description));
+                    query_counts += 1;
+                }
+
+                if let Some(main_room) = &data.main_room {
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(" AND main_room ILIKE ${query_counts}"));
+                    } else {
+                        query.push_str(&format!("WHERE main_room ILIKE ${query_counts}"));
+                    }
+
+                    string_params.push(format!("%{}%", main_room));
+                    query_counts += 1;
+                }
+
+                if let Some(logo_url) = &data.logo_url {
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(" AND logo_url ILIKE ${query_counts}"));
+                    } else {
+                        query.push_str(&format!("WHERE logo_url ILIKE ${query_counts}"));
+                    }
+                    string_params.push(format!("%{}%", logo_url));
+                    query_counts += 1;
+                }
+
+                if let Some(background_color) = &data.background_color {
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(" AND background_color ILIKE ${query_counts}"));
+                    } else {
+                        query.push_str(&format!("WHERE background_color ILIKE ${query_counts}"));
+                    }
+
+                    string_params.push(format!("%{}%", background_color));
+                    query_counts += 1;
+                }
+
+                if let Some(accent_color) = &data.accent_color {
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(" AND accent_color ILIKE ${query_counts}"));
+                    } else {
+                        query.push_str(&format!("WHERE accent_color ILIKE ${query_counts}"));
+                    }
+
+                    string_params.push(format!("%{}%", accent_color));
+                    query_counts += 1;
+                }
+
+                if let Some(house) = &data.house {
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(" AND house = ${query_counts}"));
+                    } else {
+                        query.push_str(&format!("WHERE house = ${query_counts}"));
+                    }
+
+                    house_params.push(*house);
+                    query_counts += 1;
+                }
+
+                if let Some(map_location) = &data.map_location {
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(" AND map_location = ${query_counts}"));
+                    } else {
+                        query.push_str(&format!("WHERE map_location = ${query_counts}"));
+                    }
+
+                    int_params.push(*map_location);
+                    query_counts += 1;
+                }
+
+                // SELECT from club_staffs where club_id = $1 and student_id is in data.staff vector
+                if let Some(staffs) = &data.staffs {
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(" AND clubs.id IN (SELECT club_id FROM club_staffs WHERE student_id IN ("));
+                    } else {
+                        query.push_str(&format!("WHERE clubs.id IN (SELECT club_id FROM club_staffs WHERE student_id IN ("));
+                    }
+
+                    for (i, staff) in staffs.iter().enumerate() {
+                        if i != 0 {
+                            query.push_str(&format!(", ${}", query_counts));
+                            int_params.push(*staff);
+                            query_counts += 1;
+                        } else {
+                            query.push_str(&format!("${}", query_counts));
+                            int_params.push(*staff);
+                            query_counts += 1;
+                        }
+                    }
+                    query.push_str("))");
+                }
+            }
+        }
+
+        // if sort is not empty, add ORDER BY clause and check the sort fields are valid
+        if let Some(sort) = &request.sorting {
+            let sort_vec = match sort.by.clone() {
+                Some(sort) => sort,
+                // return vector of id if sort.by is None
+                None => vec![ClubSortableField::Id],
+            };
+
+            if !sort_vec.is_empty() {
+                query.push_str(" ORDER BY");
+
+                let mut first = true;
+                for s in sort_vec {
+                    if !first {
+                        query.push_str(",");
+                    }
+
+                    match s {
+                        ClubSortableField::Id => query.push_str(" clubs.id"),
+                        ClubSortableField::CreatedAt => query.push_str(" clubs.created_at"),
+                        ClubSortableField::NameTh => query.push_str(" name_th"),
+                        ClubSortableField::NameEn => query.push_str(" name_en"),
+                        ClubSortableField::DescriptionTh => query.push_str(" description_th"),
+                        ClubSortableField::DescriptionEn => query.push_str(" description_en"),
+                        ClubSortableField::MainRoom => query.push_str(" main_room"),
+                        ClubSortableField::LogoUrl => query.push_str(" logo_url"),
+                        ClubSortableField::BackgroundColor => query.push_str(" background_color"),
+                        ClubSortableField::AccentColor => query.push_str(" accent_color"),
+                        ClubSortableField::House => query.push_str(" house"),
+                        ClubSortableField::MapLocation => query.push_str(" map_location"),
+                    }
+
+                    first = false;
+                }
+
+                // check if it is ascending or descending
+                if sort.ascending {
+                    query.push_str(" ASC");
+                } else {
+                    query.push_str(" DESC");
+                }
+            }
+        }
+        // do pagination by default with size = 50 and page = 1 if not specified
+        let pagination = match &request.pagination {
+            Some(pagination) => pagination,
+            None => &PaginationConfig {
+                size: Some(50),
+                p: 1,
+            },
+        };
+
+        let size = pagination.size.unwrap_or(50);
+        let page = pagination.p;
+
+        let next_count = query_counts + 1;
+
+        query.push_str(&format!(" LIMIT ${query_counts} OFFSET ${next_count}",));
+
+        int_params.push(size as i64);
+
+        int_params.push(((page - 1) * size) as i64);
+
+        (query, string_params, house_params, int_params)
     }
 
     pub async fn update_by_id(
@@ -399,182 +604,8 @@ impl ClubTable {
         // request.filter.q is the search query
         // request.filter.data is the filter data with type Self
 
-        let query_clause = r#"
-            SELECT clubs.id, clubs.created_at, name_th, name_en, description_th, description_en, main_room, logo_url, background_color, accent_color, house, map_location
-            FROM clubs INNER JOIN organizations ON clubs.organization_id = organizations.id
-            "#;
-
-        let mut query_counts = 1;
-
-        let mut query = String::from(query_clause);
-        let mut string_params = Vec::new();
-        let mut house_params = Vec::new();
-        let mut int_params = Vec::new();
-
-        if let Some(filter) = &request.filter {
-            if let Some(q) = &filter.q {
-                query.push_str(&format!("WHERE name_th ILIKE ${query_counts} OR name_en ILIKE ${query_counts} OR description_th ILIKE ${query_counts} OR description_en ILIKE ${query_counts} OR main_room ILIKE ${query_counts}"));
-                string_params.push(format!("%{}%", q));
-                query_counts += 1;
-            }
-
-            if let Some(data) = &filter.data {
-                if let Some(name) = &data.name {
-                    query.push_str(&format!(
-                        "WHERE (name_th ILIKE ${query_counts} OR name_en ILIKE ${query_counts})"
-                    ));
-                    string_params.push(format!("%{}%", name));
-                    query_counts += 1;
-                }
-
-                if let Some(description) = &data.description {
-                    if query.contains("WHERE") {
-                        query.push_str(&format!(
-                            " AND (description_th ILIKE ${query_counts} OR description_en ILIKE ${query_counts})"
-                        ));
-                    } else {
-                        query.push_str(&format!(
-                            "WHERE (description_th ILIKE ${query_counts} OR description_en ILIKE ${query_counts})"
-                        ));
-                    }
-                    string_params.push(format!("%{}%", description));
-                    query_counts += 1;
-                }
-
-                if let Some(main_room) = &data.main_room {
-                    if query.contains("WHERE") {
-                        query.push_str(&format!(" AND main_room ILIKE ${query_counts}"));
-                    } else {
-                        query.push_str(&format!("WHERE main_room ILIKE ${query_counts}"));
-                    }
-
-                    string_params.push(format!("%{}%", main_room));
-                    query_counts += 1;
-                }
-
-                if let Some(logo_url) = &data.logo_url {
-                    if query.contains("WHERE") {
-                        query.push_str(&format!(" AND logo_url ILIKE ${query_counts}"));
-                    } else {
-                        query.push_str(&format!("WHERE logo_url ILIKE ${query_counts}"));
-                    }
-                    string_params.push(format!("%{}%", logo_url));
-                    query_counts += 1;
-                }
-
-                if let Some(background_color) = &data.background_color {
-                    if query.contains("WHERE") {
-                        query.push_str(&format!(" AND background_color ILIKE ${query_counts}"));
-                    } else {
-                        query.push_str(&format!("WHERE background_color ILIKE ${query_counts}"));
-                    }
-
-                    string_params.push(format!("%{}%", background_color));
-                    query_counts += 1;
-                }
-
-                if let Some(accent_color) = &data.accent_color {
-                    if query.contains("WHERE") {
-                        query.push_str(&format!(" AND accent_color ILIKE ${query_counts}"));
-                    } else {
-                        query.push_str(&format!("WHERE accent_color ILIKE ${query_counts}"));
-                    }
-
-                    string_params.push(format!("%{}%", accent_color));
-                    query_counts += 1;
-                }
-
-                if let Some(house) = &data.house {
-                    if query.contains("WHERE") {
-                        query.push_str(&format!(" AND house = ${query_counts}"));
-                    } else {
-                        query.push_str(&format!("WHERE house = ${query_counts}"));
-                    }
-
-                    house_params.push(*house);
-                    query_counts += 1;
-                }
-
-                if let Some(map_location) = &data.map_location {
-                    if query.contains("WHERE") {
-                        query.push_str(&format!(" AND map_location = ${query_counts}"));
-                    } else {
-                        query.push_str(&format!("WHERE map_location = ${query_counts}"));
-                    }
-
-                    int_params.push(*map_location);
-                    query_counts += 1;
-                }
-            }
-        }
-
-        // if sort is not empty, add ORDER BY clause and check the sort fields are valid
-        if let Some(sort) = &request.sorting {
-            let sort_vec = match sort.by.clone() {
-                Some(sort) => sort,
-                // return vector of id if sort.by is None
-                None => vec![ClubSortableField::Id],
-            };
-
-            if !sort_vec.is_empty() {
-                query.push_str(" ORDER BY");
-
-                let mut first = true;
-                for s in sort_vec {
-                    if !first {
-                        query.push_str(",");
-                    }
-
-                    match s {
-                        ClubSortableField::Id => query.push_str(" clubs.id"),
-                        ClubSortableField::CreatedAt => query.push_str(" clubs.created_at"),
-                        ClubSortableField::NameTh => query.push_str(" name_th"),
-                        ClubSortableField::NameEn => query.push_str(" name_en"),
-                        ClubSortableField::DescriptionTh => query.push_str(" description_th"),
-                        ClubSortableField::DescriptionEn => query.push_str(" description_en"),
-                        ClubSortableField::MainRoom => query.push_str(" main_room"),
-                        ClubSortableField::LogoUrl => query.push_str(" logo_url"),
-                        ClubSortableField::BackgroundColor => query.push_str(" background_color"),
-                        ClubSortableField::AccentColor => query.push_str(" accent_color"),
-                        ClubSortableField::House => query.push_str(" house"),
-                        ClubSortableField::MapLocation => query.push_str(" map_location"),
-                    }
-
-                    first = false;
-                }
-
-                // check if it is ascending or descending
-                if sort.ascending {
-                    query.push_str(" ASC");
-                } else {
-                    query.push_str(" DESC");
-                }
-            }
-        }
-        // do pagination by default with size = 50 and page = 1 if not specified
-        let pagination = match &request.pagination {
-            Some(pagination) => pagination,
-            None => &PaginationConfig {
-                size: Some(50),
-                p: 1,
-            },
-        };
-
-        let size = pagination.size.unwrap_or(50);
-        let page = pagination.p;
-
-        let next_count = query_counts + 1;
-
-        query.push_str(&format!(" LIMIT ${query_counts} OFFSET ${next_count}",));
-
-        int_params.push(size as i64);
-
-        int_params.push(((page - 1) * size) as i64);
-
-        // println!(
-        //     "{} {:?} {:?} {:?}",
-        //     query, string_params, house_params, int_params
-        // );
+        let (query, string_params, house_params, int_params) =
+            ClubTable::construct_query_string(request);
 
         let mut res = sqlx::query_as::<_, Self>(&query);
 
@@ -591,6 +622,18 @@ impl ClubTable {
         }
 
         let res = res.fetch_all(pool).await?;
+
+        // let mut pagination = PaginationType {
+        //     total: res.len() as i64,
+        //     first: None, // TODO use the RequestType to unparse using serde and return the first page using pagination.p = 1
+        //     last: None,  // TODO use the RequestType to unparse using serde and return the last page using pagination.p = last_page
+        //     prev: None,  // TODO use the RequestType to unparse using serde and return the previous page using pagination.p = current_page - 1 or None if current_page == 1
+        //     next: None,  // TODO use the RequestType to unparse using serde and return the next page using pagination.p = current_page + 1 or None if current_page == last_page
+        //     size: match request.pagination {
+        //         Some(pagination) => pagination.size,
+        //         None => 50,
+        //     }
+        // };
 
         // cause LIMIT to be a text[] instead of a bigint in the query
 
