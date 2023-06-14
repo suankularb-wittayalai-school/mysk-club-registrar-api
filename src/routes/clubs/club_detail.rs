@@ -99,7 +99,7 @@ pub async fn update_club_by_id(
     .fetch_one(pool)
     .await;
 
-    dbg!(&res, student_id, club_id, &request);
+    // dbg!(&res, student_id, club_id, &request);
 
     // if the student is not club staff, return 403
     if let Ok(res) = res {
