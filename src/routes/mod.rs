@@ -5,11 +5,30 @@ pub(crate) mod health;
 pub(crate) mod index;
 pub(crate) mod test_auth;
 
+use utoipa::{
+    openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+    Modify, OpenApi,
+};
 use utoipa_swagger_ui::SwaggerUi;
 
-use utoipa::OpenApi;
+use crate::structs::{auth, classroom, clubs as clubsType, common, contacts, student};
 
-use crate::structs::{classroom, clubs as clubsType, common, contacts, student};
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi.components.as_mut().unwrap(); // we can unwrap safely since there already is components registered.
+        components.add_security_scheme(
+            "JWT Token",
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .bearer_format("Bearer")
+                    .build(),
+            ),
+        )
+    }
+}
 
 #[derive(OpenApi)]
 #[openapi(
@@ -28,6 +47,7 @@ use crate::structs::{classroom, clubs as clubsType, common, contacts, student};
         contacts::CompactContact,
         contacts::DefaultContact,
         contacts::ContactType,
+        clubsType::ActivityDayHouse,
         clubsType::IdOnlyClub,
         clubsType::CompactClub,
         clubsType::DefaultClub,
@@ -36,7 +56,10 @@ use crate::structs::{classroom, clubs as clubsType, common, contacts, student};
         classroom::Classroom,
         student::Student,
         common::MultiLangString,
-    ))
+        auth::User,
+        auth::UserRoles
+    )),
+    modifiers(&SecurityAddon)
 )]
 struct ApiDoc;
 

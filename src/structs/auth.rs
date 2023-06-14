@@ -7,6 +7,8 @@ use futures::Future as FutureTrait;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Postgres};
+use utoipa::openapi::schema;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use std::pin::Pin;
@@ -15,7 +17,7 @@ use crate::AppState;
 
 use crate::structs::common::{ErrorResponseType, ErrorType};
 
-#[derive(Debug)]
+#[derive(Debug, ToSchema)]
 pub enum UserRoles {
     Teacher,
     Student,
@@ -139,8 +141,9 @@ impl UserTable {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct User {
+    #[schema(value_type=String)]
     pub id: Uuid,
     pub email: Option<String>,
     pub role: UserRoles,
