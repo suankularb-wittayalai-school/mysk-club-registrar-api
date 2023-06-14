@@ -5,9 +5,9 @@ use utoipa::ToSchema;
 
 use crate::structs::common::MultiLangString;
 
-use super::common::FetchLevel;
+use super::common::{FetchLevel, FlexibleMultiLangString};
 
-#[derive(Debug, ToSchema)]
+#[derive(Debug, Clone, Copy, ToSchema)]
 pub enum ContactType {
     Phone,
     Email,
@@ -91,6 +91,16 @@ impl<'de> Deserialize<'de> for ContactType {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateContact {
+    pub name: FlexibleMultiLangString,
+    pub value: String,
+    pub contact_type: ContactType,
+    pub include_students: Option<bool>,
+    pub include_teachers: Option<bool>,
+    pub include_parents: Option<bool>,
+}
+
 #[derive(Debug, FromRow)]
 struct ContactTable {
     pub id: i64,
@@ -137,6 +147,31 @@ impl ContactTable {
         .await?;
         Ok(res)
     }
+
+    pub async fn create_contact(
+        pool: &sqlx::PgPool,
+        contact: &CreateContact,
+    ) -> Result<Self, sqlx::Error> {
+        let res = sqlx::query!(
+            r#"
+            INSERT INTO contacts (name_th, name_en, value, type, include_students, include_teachers, include_parents)
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
+            "#,
+            contact.name.th,
+            contact.name.en,
+            contact.value,
+            contact.contact_type as ContactType,
+            contact.include_students,
+            contact.include_teachers,
+            contact.include_parents
+        )
+        .fetch_one(pool)
+        .await?;
+
+        let contact_id = res.id;
+
+        Ok(Self::get_by_id(pool, contact_id as u32).await?)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, ToSchema)]
@@ -151,6 +186,18 @@ pub struct DefaultContact {
 }
 
 impl DefaultContact {
+    fn from_table(contact: ContactTable) -> Self {
+        Self {
+            id: contact.id as u32,
+            name: MultiLangString::new(contact.name_en, contact.name_th.unwrap_or("".to_string())),
+            value: contact.value,
+            contact_type: contact.contact_type,
+            include_student: contact.include_students,
+            include_teacher: contact.include_teachers,
+            include_parents: contact.include_parents,
+        }
+    }
+
     pub async fn get_by_id(pool: &sqlx::PgPool, id: u32) -> Result<DefaultContact, sqlx::Error> {
         let res = ContactTable::get_by_id(pool, id).await?;
         Ok(DefaultContact {
@@ -194,6 +241,12 @@ pub struct IdOnlyContact {
 }
 
 impl IdOnlyContact {
+    fn from_table(table: ContactTable) -> Self {
+        IdOnlyContact {
+            id: table.id as u32,
+        }
+    }
+
     pub async fn get_by_id(pool: &sqlx::PgPool, id: u32) -> Result<IdOnlyContact, sqlx::Error> {
         let res = ContactTable::get_by_id(pool, id).await?;
         Ok(IdOnlyContact { id: res.id as u32 })
@@ -223,6 +276,15 @@ pub struct CompactContact {
 }
 
 impl CompactContact {
+    fn from_table(contact: ContactTable) -> Self {
+        CompactContact {
+            id: contact.id as u32,
+            name: MultiLangString::new(contact.name_en, contact.name_th.unwrap_or("".to_string())),
+            value: contact.value,
+            contact_type: contact.contact_type,
+        }
+    }
+
     pub async fn get_by_id(pool: &sqlx::PgPool, id: u32) -> Result<CompactContact, sqlx::Error> {
         let res = ContactTable::get_by_id(pool, id).await?;
         Ok(CompactContact {
@@ -262,6 +324,18 @@ pub enum Contact {
 }
 
 impl Contact {
+    fn from_table(
+        pool: &sqlx::PgPool,
+        contact: ContactTable,
+        fetch_level: FetchLevel,
+    ) -> Result<Contact, sqlx::Error> {
+        match fetch_level {
+            FetchLevel::Default => Ok(Contact::Default(DefaultContact::from_table(contact))),
+            FetchLevel::IdOnly => Ok(Contact::IdOnly(IdOnlyContact::from_table(contact))),
+            FetchLevel::Compact => Ok(Contact::Compact(CompactContact::from_table(contact))),
+        }
+    }
+
     pub async fn get_by_id(
         pool: &sqlx::PgPool,
         id: u32,
@@ -304,6 +378,20 @@ impl Contact {
                 }
                 Ok(contacts)
             }
+        }
+    }
+
+    pub async fn create(
+        pool: &sqlx::PgPool,
+        contact: &CreateContact,
+        fetch_level: FetchLevel,
+    ) -> Result<Contact, sqlx::Error> {
+        let res = ContactTable::create_contact(pool, contact).await?;
+
+        match fetch_level {
+            FetchLevel::Default => Ok(Contact::Default(DefaultContact::from_table(res))),
+            FetchLevel::IdOnly => Ok(Contact::IdOnly(IdOnlyContact::from_table(res))),
+            FetchLevel::Compact => Ok(Contact::Compact(CompactContact::from_table(res))),
         }
     }
 }
