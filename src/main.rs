@@ -48,7 +48,9 @@ async fn main() -> std::io::Result<()>  {
     HttpServer::new(move || {
             let cors = Cors::default()
                 .allowed_origin("http://localhost:3000")
-                .allowed_methods(vec!["GET", "POST", "PATCH", "DELETE"])
+                .allowed_origin("http://localhost:8000")
+                .allowed_origin("https://club.mysk.school")
+                .allowed_methods(vec!["GET", "POST", "PATCH", "DELETE", "PUT"])
                 .allowed_headers(vec![
                     header::CONTENT_TYPE,
                     header::AUTHORIZATION,
@@ -61,7 +63,7 @@ async fn main() -> std::io::Result<()>  {
                 .wrap(cors)
                 .wrap(Logger::default())
         })
-        .bind(("127.0.0.1", 8000))?
+        .bind(("0.0.0.0", 8000))?
         .run()
         .await
 }
