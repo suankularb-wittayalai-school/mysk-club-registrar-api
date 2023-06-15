@@ -3,6 +3,8 @@ FROM rust:latest as build
 WORKDIR /usr/src/app
 COPY . .
 COPY .env.docker .env
+# copy the ssl certificates which would need to be used by the code later
+COPY ./ssl ./ssl
 
 RUN apt-get update && apt-get install libpq5 -y
 
@@ -34,6 +36,7 @@ COPY --from=build /lib/${ARCH}-linux-gnu/libkeyutils.so* /lib/${ARCH}-linux-gnu/
 
 COPY --from=build /usr/src/app/target/release/mysk_club_registrar_api /usr/local/bin/mysk_club_registrar_api
 COPY --from=build /usr/src/app/.env /.env
+COPY --from=build /usr/src/app/ssl /usr/local/bin/ssl
 
 CMD ["mysk_club_registrar_api"]
 
