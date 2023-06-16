@@ -1,10 +1,10 @@
-use actix_web::{get, web, HttpRequest, HttpResponse, Responder};
+use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
 use serde_qs;
 use uuid::Uuid;
 
 use crate::structs::{
     // clubs::{Club, ClubSortableField, QueryableClub, UpdatableClub}
-    club_request::{ClubRequest, ClubRequestSortableField, QueryableClubRequest},
+    club_request::{ClubRequestSortableField, ClubRequestTable, QueryableClubRequest},
     common::{ErrorResponseType, ErrorType, MetadataType, RequestType, ResponseType},
     student::Student,
 };
@@ -19,7 +19,7 @@ pub async fn query_club_requests(
     let pool = &data.db;
 
     let request_query = serde_qs::from_str::<
-        RequestType<ClubRequest, QueryableClubRequest, ClubRequestSortableField>,
+        RequestType<ClubRequestTable, QueryableClubRequest, ClubRequestSortableField>,
     >(&request.query_string());
 
     let request_query = match request_query {
@@ -40,7 +40,7 @@ pub async fn query_club_requests(
         }
     };
 
-    let club_request = match ClubRequest::query(pool, &request_query).await {
+    let club_request = match ClubRequestTable::query(pool, &request_query).await {
         Ok(club_request) => club_request,
         Err(e) => {
             let response: ErrorResponseType = ErrorResponseType::new(
@@ -58,7 +58,7 @@ pub async fn query_club_requests(
         }
     };
 
-    let response: ResponseType<Vec<ClubRequest>, _> =
+    let response: ResponseType<Vec<ClubRequestTable>, _> =
         ResponseType::new(club_request, None::<String>, None::<MetadataType>);
 
     HttpResponse::Ok().json(response)

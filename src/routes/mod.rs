@@ -61,7 +61,7 @@ impl Modify for SecurityAddon {
         common::MultiLangString,
         auth::User,
         auth::UserRoles,
-        club_request::ClubRequest,
+        club_request::ClubRequestTable,
     )),
     modifiers(&SecurityAddon)
 )]

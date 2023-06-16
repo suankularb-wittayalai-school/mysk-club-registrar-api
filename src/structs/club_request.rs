@@ -5,8 +5,9 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::{
-    clubs::SubmissionStatus,
-    common::{PaginationConfig, RequestType},
+    clubs::{Club, SubmissionStatus},
+    common::{FetchLevel, PaginationConfig, RequestType},
+    student::Student,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,7 +48,7 @@ pub enum ClubRequestSortableField {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
-pub struct ClubRequest {
+pub struct ClubRequestTable {
     pub id: Uuid,
     pub club_id: Uuid,
     pub student_id: i64,
@@ -56,7 +57,7 @@ pub struct ClubRequest {
     pub created_at: Option<DateTime<Utc>>,
 }
 
-impl ClubRequest {
+impl ClubRequestTable {
     pub async fn get_by_id(pool: &sqlx::PgPool, id: Uuid) -> Result<Self, sqlx::Error> {
         Ok(sqlx::query_as!(
             Self,
@@ -216,7 +217,7 @@ impl ClubRequest {
 
     pub async fn query(
         pool: &sqlx::PgPool,
-        request_params: &RequestType<Self, QueryableClubRequest, ClubRequestSortableField>,
+        request_params: &RequestType<ClubRequest, QueryableClubRequest, ClubRequestSortableField>,
     ) -> Result<Vec<Self>, sqlx::Error> {
         let (query, uuid_params, i64_params, submission_status_params, pagination_params) =
             Self::construct_query_string(request_params);
@@ -240,5 +241,178 @@ impl ClubRequest {
         }
 
         Ok(res.fetch_all(pool).await?)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdOnlyClubRequest {
+    pub id: Uuid,
+}
+
+impl IdOnlyClubRequest {
+    fn from_table(table: ClubRequestTable) -> Self {
+        Self { id: table.id }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DefaultClubRequest {
+    pub id: Uuid,
+    pub club: Club,
+    pub student: Student,
+    pub year: i64,
+    pub membership_status: SubmissionStatus,
+}
+
+impl DefaultClubRequest {
+    async fn from_table(
+        pool: &sqlx::PgPool,
+        table: ClubRequestTable,
+        descendant_fetch_level: Option<FetchLevel>,
+    ) -> Result<Self, sqlx::Error> {
+        let club = Club::get_by_id(
+            pool,
+            table.club_id,
+            descendant_fetch_level.clone(),
+            Some(FetchLevel::IdOnly),
+        )
+        .await?;
+        let student = Student::get_by_id(
+            pool,
+            table.student_id as u32,
+            descendant_fetch_level.clone(),
+            Some(FetchLevel::IdOnly),
+        )
+        .await?;
+
+        Ok(Self {
+            id: table.id,
+            club,
+            student,
+            year: table.year,
+            membership_status: table.membership_status,
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub enum ClubRequest {
+    Default(DefaultClubRequest),
+    Compact(DefaultClubRequest),
+    IdOnly(IdOnlyClubRequest),
+}
+
+impl ClubRequest {
+    async fn from_table(
+        pool: &sqlx::PgPool,
+        table: ClubRequestTable,
+        descendant_fetch_level: Option<FetchLevel>,
+        fetch_level: Option<FetchLevel>,
+    ) -> Result<Self, sqlx::Error> {
+        match fetch_level {
+            Some(FetchLevel::Default) => Ok(Self::Default(
+                DefaultClubRequest::from_table(pool, table, descendant_fetch_level).await?,
+            )),
+            Some(FetchLevel::Compact) => Ok(Self::Compact(
+                DefaultClubRequest::from_table(pool, table, descendant_fetch_level).await?,
+            )),
+            Some(FetchLevel::IdOnly) => Ok(Self::IdOnly(IdOnlyClubRequest::from_table(table))),
+            None => Ok(Self::IdOnly(IdOnlyClubRequest::from_table(table))),
+        }
+    }
+
+    pub async fn get_by_id(
+        pool: &sqlx::PgPool,
+        id: Uuid,
+        descendent_fetch_level: Option<FetchLevel>,
+        fetch_level: Option<FetchLevel>,
+    ) -> Result<Self, sqlx::Error> {
+        let table = sqlx::query_as::<_, ClubRequestTable>(
+            r#"
+            SELECT * FROM club_requests WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+
+        Self::from_table(pool, table, descendent_fetch_level, fetch_level).await
+    }
+
+    pub async fn query(
+        pool: &sqlx::PgPool,
+        request_params: &RequestType<Self, QueryableClubRequest, ClubRequestSortableField>,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let fetch_level = match &request_params.fetch_level {
+            Some(fetch_level) => fetch_level,
+            None => &FetchLevel::Default,
+        };
+
+        let join_requests = match ClubRequestTable::query(pool, request_params).await {
+            Ok(join_requests) => join_requests,
+            Err(e) => {
+                // error!("Error querying club requests: {}", e);
+                // Err(e)
+                return Err(e);
+            }
+        };
+
+        match fetch_level {
+            FetchLevel::Default => {
+                let res = join_requests
+                    .into_iter()
+                    .map(|join_request| {
+                        Self::from_table(
+                            pool,
+                            join_request,
+                            request_params.descendant_fetch_level.clone(),
+                            Some(*fetch_level),
+                        )
+                    })
+                    .collect::<Result<Vec<Self>, sqlx::Error>>()
+                    .await?;
+                Ok(res)
+            }
+            FetchLevel::Compact => {
+                let res = join_requests
+                    .into_iter()
+                    .map(|join_request| {
+                        Self::from_table(
+                            pool,
+                            join_request,
+                            request_params.descendant_fetch_level.clone(),
+                            Some(*fetch_level),
+                        )
+                    })
+                    .collect::<Result<Vec<Self>, sqlx::Error>>()
+                    .await?;
+                Ok(res)
+            }
+            FetchLevel::IdOnly => {
+                let res = join_requests
+                    .into_iter()
+                    .map(|join_request| {
+                        Self::from_table(
+                            pool,
+                            join_request,
+                            request_params.descendant_fetch_level.clone(),
+                            Some(*fetch_level),
+                        )
+                    })
+                    .collect::<Result<Vec<Self>, sqlx::Error>>()
+                    .await?;
+                Ok(res)
+            }
+        }
+    }
+}
+
+impl Serialize for ClubRequest {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            ClubRequest::Default(default) => default.serialize(serializer),
+            ClubRequest::Compact(compact) => compact.serialize(serializer),
+            ClubRequest::IdOnly(id_only) => id_only.serialize(serializer),
+        }
     }
 }
