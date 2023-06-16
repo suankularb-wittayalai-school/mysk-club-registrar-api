@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::{structs::common::PaginationConfig, utils::date::get_current_academic_year};
 
 use super::{
-    common::{FetchLevel, FlexibleMultiLangString, MultiLangString, PaginationType, RequestType},
+    common::{FetchLevel, FlexibleMultiLangString, MultiLangString, RequestType},
     contacts::Contact,
     student::Student,
 };
@@ -88,7 +88,7 @@ impl<'de> Deserialize<'de> for ActivityDayHouse {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SubmissionStatus {
     Pending,
     Approved,
@@ -127,6 +127,23 @@ impl Encode<'_, Postgres> for SubmissionStatus {
     ) -> sqlx::encode::IsNull {
         let s = self.to_string();
         <String as sqlx::Encode<sqlx::Postgres>>::encode(s, buf)
+    }
+}
+
+impl Serialize for SubmissionStatus {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for SubmissionStatus {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+
+        match SubmissionStatus::from_string(&s) {
+            Some(status) => Ok(status),
+            None => Err(serde::de::Error::custom("Invalid submission status")),
+        }
     }
 }
 
