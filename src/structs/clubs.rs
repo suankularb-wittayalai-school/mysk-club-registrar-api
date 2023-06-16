@@ -523,6 +523,12 @@ impl ClubTable {
             organization_string_params.push(main_room);
         }
 
+        if let Some(logo_url) = &club.logo_url {
+            update_organization_query.push_str(&format!("logo_url = ${}, ", query_counts));
+            query_counts += 1;
+            organization_string_params.push(logo_url);
+        }
+
         update_organization_query.pop();
         update_organization_query.pop();
 
