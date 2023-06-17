@@ -75,7 +75,7 @@ pub async fn join_club_by_id(
 
     let club_request_count = sqlx::query!(
         r#"
-        SELECT COUNT(id) FROM club_members WHERE club_id = $1 AND student_id = $2 AND year = $3 AND membership_status = 'approved'
+        SELECT COUNT(id) FROM club_members WHERE club_id = $1 AND student_id = $2 AND year = $3 AND (membership_status = 'approved' OR membership_status = 'pending')
         "#,
         club_id,
         student_id as i64,
