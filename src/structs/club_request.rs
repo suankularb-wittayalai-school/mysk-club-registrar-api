@@ -27,7 +27,6 @@ pub struct CreatableClubRequest {
     pub club_id: Uuid,
     pub student_id: i64,
     pub year: Option<i64>,
-    pub membership_status: SubmissionStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -257,15 +256,15 @@ impl ClubRequestTable {
 
         let res = sqlx::query_as::<_, ClubRequestTable>(
             r#"
-            INSERT INTO club_requests (club_id, student_id, year, membership_status)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO club_members (club_id, student_id, year, membership_status)
+            VALUES ($1, $2, $3, 'pending')
             RETURNING id, created_at, club_id, student_id, year, membership_status
             "#,
         )
         .bind(&request.club_id)
         .bind(&request.student_id)
         .bind(&year)
-        .bind(&request.membership_status)
+        // .bind(&request.membership_status)
         .fetch_one(&mut transaction)
         .await?;
 

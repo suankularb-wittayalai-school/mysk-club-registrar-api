@@ -78,6 +78,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(clubs::club_join_request::query_club_requests);
     cfg.service(clubs::club_join_request_detail::get_club_request_by_id);
     cfg.service(clubs::club_join_request_detail::approve_or_reject_club_request);
+    cfg.service(clubs::join_club::join_club_by_id);
     cfg.service(
         SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", ApiDoc::openapi()),
     );
