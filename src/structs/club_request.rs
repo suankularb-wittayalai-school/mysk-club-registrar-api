@@ -4,6 +4,8 @@ use sqlx::FromRow;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::utils::date::get_current_academic_year;
+
 use super::{
     clubs::{Club, SubmissionStatus},
     common::{FetchLevel, PaginationConfig, RequestType},
@@ -241,6 +243,43 @@ impl ClubRequestTable {
 
         Ok(res.fetch_all(pool).await?)
     }
+
+    pub async fn create(
+        pool: &sqlx::PgPool,
+        request: CreatableClubRequest,
+    ) -> Result<Self, sqlx::Error> {
+        let mut transaction = pool.begin().await?;
+
+        let year = match request.year {
+            Some(year) => year,
+            None => get_current_academic_year() as i64,
+        };
+
+        let res = sqlx::query_as::<_, ClubRequestTable>(
+            r#"
+            INSERT INTO club_requests (club_id, student_id, year, membership_status)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, created_at, club_id, student_id, year, membership_status
+            "#,
+        )
+        .bind(&request.club_id)
+        .bind(&request.student_id)
+        .bind(&year)
+        .bind(&request.membership_status)
+        .fetch_one(&mut transaction)
+        .await?;
+
+        transaction.commit().await?;
+
+        Ok(Self {
+            id: res.id,
+            created_at: res.created_at,
+            club_id: res.club_id,
+            student_id: res.student_id,
+            year: res.year,
+            membership_status: res.membership_status,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -409,6 +448,17 @@ impl ClubRequest {
         .await?;
 
         Ok(ClubRequest::get_by_id(pool, id, fetch_level, descendant_fetch_level).await?)
+    }
+
+    pub async fn create(
+        pool: &sqlx::PgPool,
+        request: CreatableClubRequest,
+        fetch_level: Option<FetchLevel>,
+        descendant_fetch_level: Option<FetchLevel>,
+    ) -> Result<Self, sqlx::Error> {
+        let res = ClubRequestTable::create(pool, request).await?;
+
+        Ok(ClubRequest::get_by_id(pool, res.id, fetch_level, descendant_fetch_level).await?)
     }
 }
 
