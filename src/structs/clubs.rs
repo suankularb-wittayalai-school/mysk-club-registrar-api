@@ -217,7 +217,7 @@ pub enum ClubSortableField {
     MapLocation,
 }
 
-#[derive(FromRow)]
+#[derive(FromRow, Clone)]
 struct ClubTable {
     pub id: Uuid,
     pub created_at: Option<DateTime<Utc>>,
@@ -782,7 +782,7 @@ impl IdOnlyClub {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, ToSchema)]
+#[derive(Deserialize, Serialize, Debug, ToSchema, Clone)]
 pub struct CompactClub {
     #[schema(value_type = String)]
     pub id: Uuid,
@@ -791,6 +791,7 @@ pub struct CompactClub {
     pub logo_url: Option<String>,
     pub house: Option<ActivityDayHouse>,
     pub map_location: Option<u32>,
+    pub background_color: Option<String>,
 }
 
 impl CompactClub {
@@ -808,26 +809,14 @@ impl CompactClub {
             logo_url: club.logo_url,
             house: club.house,
             map_location: club.map_location.map(|l| l as u32),
+            background_color: club.background_color,
         }
     }
 
     pub async fn get_by_id(pool: &sqlx::PgPool, id: Uuid) -> Result<CompactClub, sqlx::Error> {
         let res = ClubTable::get_by_id(pool, id).await?;
 
-        Ok(CompactClub {
-            id: res.id,
-            name: MultiLangString {
-                th: res.name_th,
-                en: res.name_en,
-            },
-            description: match (res.description_th, res.description_en) {
-                (Some(th), Some(en)) => Some(MultiLangString { th, en: Some(en) }),
-                _ => None,
-            },
-            logo_url: res.logo_url,
-            house: res.house,
-            map_location: res.map_location.map(|l| l as u32),
-        })
+        Ok(CompactClub::from_table(res))
     }
 
     pub async fn query(
@@ -838,20 +827,7 @@ impl CompactClub {
 
         Ok(res
             .iter()
-            .map(|r| CompactClub {
-                id: r.id,
-                name: MultiLangString {
-                    th: r.name_th.clone(),
-                    en: r.name_en.clone(),
-                },
-                description: match (r.description_th.clone(), r.description_en.clone()) {
-                    (Some(th), Some(en)) => Some(MultiLangString { th, en: Some(en) }),
-                    _ => None,
-                },
-                logo_url: r.logo_url.clone(),
-                house: r.house.clone(),
-                map_location: r.map_location.map(|l| l as u32),
-            })
+            .map(|r| CompactClub::from_table(r.clone()))
             .collect())
     }
 }

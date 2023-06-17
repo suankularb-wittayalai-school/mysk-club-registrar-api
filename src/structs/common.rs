@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use utoipa::{IntoParams, ToSchema};
 
-#[derive(Serialize, Deserialize, Debug, ToSchema)]
+#[derive(Serialize, Deserialize, Debug, ToSchema, Clone)]
 pub struct MultiLangString {
     #[serde(rename = "en-US")]
     pub en: Option<String>,

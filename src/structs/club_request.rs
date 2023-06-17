@@ -30,10 +30,7 @@ pub struct CreatableClubRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdatableClubRequest {
-    pub club_id: Option<Uuid>,
-    pub student_id: Option<i64>,
-    pub year: Option<i64>,
-    pub membership_status: Option<SubmissionStatus>,
+    pub membership_status: SubmissionStatus,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -376,6 +373,42 @@ impl ClubRequest {
         }
 
         Ok(res)
+    }
+
+    pub async fn approve_request(
+        pool: &sqlx::PgPool,
+        id: Uuid,
+        fetch_level: Option<FetchLevel>,
+        descendant_fetch_level: Option<FetchLevel>,
+    ) -> Result<Self, sqlx::Error> {
+        sqlx::query(
+            r#"
+            UPDATE club_members SET membership_status = 'approved' WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        Ok(ClubRequest::get_by_id(pool, id, fetch_level, descendant_fetch_level).await?)
+    }
+
+    pub async fn deny_request(
+        pool: &sqlx::PgPool,
+        id: Uuid,
+        fetch_level: Option<FetchLevel>,
+        descendant_fetch_level: Option<FetchLevel>,
+    ) -> Result<Self, sqlx::Error> {
+        sqlx::query(
+            r#"
+            UPDATE club_members SET membership_status = 'declined' WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        Ok(ClubRequest::get_by_id(pool, id, fetch_level, descendant_fetch_level).await?)
     }
 }
 
