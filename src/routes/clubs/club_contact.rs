@@ -2,8 +2,8 @@ use actix_web::{get, post, web, HttpResponse, Responder};
 use uuid::Uuid;
 
 use crate::structs::{
-    clubs::{Club, ClubSortableField, QueryableClub, UpdatableClub},
-    common::{ErrorResponseType, ErrorType, MetadataType, RequestType, ResponseType, FetchLevel},
+    clubs::{Club, ClubSortableField, QueryableClub},
+    common::{ErrorResponseType, ErrorType, FetchLevel, MetadataType, RequestType, ResponseType},
     contacts::{Contact, CreateContact},
     student::Student,
 };
@@ -130,8 +130,14 @@ pub async fn create_contact_for_club(
 
     match res {
         Ok(_) => {
-            let club = Club::get_by_id(pool, club_id, request.fetch_level.clone(), request.descendant_fetch_level.clone()).await;
-            
+            let club = Club::get_by_id(
+                pool,
+                club_id,
+                request.fetch_level.clone(),
+                request.descendant_fetch_level.clone(),
+            )
+            .await;
+
             let club = match club {
                 Ok(club) => club,
                 Err(e) => {
@@ -150,14 +156,11 @@ pub async fn create_contact_for_club(
                 }
             };
 
-            let response: ResponseType<Club, MetadataType> = ResponseType::new(
-                club,
-                None::<MetadataType>,
-                None,
-            );
+            let response: ResponseType<Club, MetadataType> =
+                ResponseType::new(club, None::<MetadataType>, None);
 
             return HttpResponse::Ok().json(response);
-        },
+        }
         Err(e) => {
             let response: ErrorResponseType = ErrorResponseType::new(
                 ErrorType {

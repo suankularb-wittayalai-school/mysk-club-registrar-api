@@ -46,3 +46,4 @@ RUN chmod -R 755 /ssl/
 CMD ["mysk_club_registrar_api"]
 
 EXPOSE 8000
+EXPOSE 4430

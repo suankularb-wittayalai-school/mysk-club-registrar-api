@@ -4,6 +4,7 @@ pub(crate) mod clubs;
 pub(crate) mod health;
 pub(crate) mod index;
 pub(crate) mod test_auth;
+// pub(crate) mod
 
 use utoipa::{
     openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
@@ -11,7 +12,9 @@ use utoipa::{
 };
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::structs::{auth, classroom, clubs as clubsType, common, contacts, student};
+use crate::structs::{
+    auth, classroom, club_request, clubs as clubsType, common, contacts, student,
+};
 
 struct SecurityAddon;
 
@@ -57,7 +60,8 @@ impl Modify for SecurityAddon {
         student::Student,
         common::MultiLangString,
         auth::User,
-        auth::UserRoles
+        auth::UserRoles,
+        club_request::ClubRequestTable,
     )),
     modifiers(&SecurityAddon)
 )]
@@ -71,6 +75,10 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(clubs::club_detail::update_club_by_id);
     cfg.service(clubs::clubs::query_clubs);
     cfg.service(clubs::club_contact::create_contact_for_club);
+    cfg.service(clubs::club_join_request::query_club_requests);
+    cfg.service(clubs::club_join_request_detail::get_club_request_by_id);
+    cfg.service(clubs::club_join_request_detail::approve_or_reject_club_request);
+    cfg.service(clubs::join_club::join_club_by_id);
     cfg.service(
         SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", ApiDoc::openapi()),
     );
