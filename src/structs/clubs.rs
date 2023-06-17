@@ -172,6 +172,7 @@ pub struct QueryableClub {
     pub house: Option<ActivityDayHouse>,
     pub map_location: Option<i64>,
     pub staffs: Option<Vec<i64>>,
+    pub members: Option<Vec<i64>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -386,6 +387,29 @@ impl ClubTable {
                         }
                     }
                     query.push_str("))");
+                }
+
+                // SELECT from club_members where club_id = $1 and student_id is in data.members vector
+
+                if let Some(members) = &data.members {
+                    if query.contains("WHERE") {
+                        query.push_str(&format!(" AND clubs.id IN (SELECT club_id FROM club_members WHERE student_id IN ("));
+                    } else {
+                        query.push_str(&format!("WHERE clubs.id IN (SELECT club_id FROM club_members WHERE student_id IN ("));
+                    }
+
+                    for (i, member) in members.iter().enumerate() {
+                        if i != 0 {
+                            query.push_str(&format!(", ${}", query_counts));
+                            int_params.push(*member);
+                            query_counts += 1;
+                        } else {
+                            query.push_str(&format!("${}", query_counts));
+                            int_params.push(*member);
+                            query_counts += 1;
+                        }
+                    }
+                    query.push_str(") AND membership_status = 'approved')");
                 }
             }
         }
