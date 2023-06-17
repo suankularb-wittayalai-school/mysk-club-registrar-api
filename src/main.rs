@@ -71,7 +71,8 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .wrap(Logger::default())
     })
-    .bind_openssl(("0.0.0.0", 8000), builder)?
+    .bind_openssl(("0.0.0.0", 4430), builder)?
+    .bind(("0.0.0.0", 8000))?
     .run()
     .await
 }

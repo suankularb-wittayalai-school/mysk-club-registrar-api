@@ -71,7 +71,7 @@ impl ClubRequestTable {
     }
 
     fn construct_query_string(
-        request_params: &RequestType<Self, QueryableClubRequest, ClubRequestSortableField>,
+        request_params: &RequestType<ClubRequest, QueryableClubRequest, ClubRequestSortableField>,
     ) -> (
         String,
         Vec<&Uuid>,
@@ -80,7 +80,7 @@ impl ClubRequestTable {
         Vec<u32>,
     ) {
         let query = r#"
-            SELECT id, club_id, student_id, year, membership_status as "membership_status: _", created_at FROM club_members
+            SELECT id, club_id, student_id, year, membership_status, created_at FROM club_members
         "#;
 
         let mut query = String::from(query);
@@ -97,9 +97,9 @@ impl ClubRequestTable {
                     uuid_params.push(id);
 
                     if query.contains("WHERE") {
-                        query.push_str(&format!(" AND id = ${query_counts}$"));
+                        query.push_str(&format!(" AND id = ${query_counts}"));
                     } else {
-                        query.push_str(&format!(" WHERE id = ${query_counts}$"));
+                        query.push_str(&format!(" WHERE id = ${query_counts}"));
                     }
 
                     query_counts += 1;
@@ -109,9 +109,9 @@ impl ClubRequestTable {
                     uuid_params.push(club_id);
 
                     if query.contains("WHERE") {
-                        query.push_str(&format!(" AND club_id = ${query_counts}$"));
+                        query.push_str(&format!(" AND club_id = ${query_counts}"));
                     } else {
-                        query.push_str(&format!(" WHERE club_id = ${query_counts}$"));
+                        query.push_str(&format!(" WHERE club_id = ${query_counts}"));
                     }
 
                     query_counts += 1;
@@ -121,9 +121,9 @@ impl ClubRequestTable {
                     i64_params.push(student_id);
 
                     if query.contains("WHERE") {
-                        query.push_str(&format!(" AND student_id = ${query_counts}$"));
+                        query.push_str(&format!(" AND student_id = ${query_counts}"));
                     } else {
-                        query.push_str(&format!(" WHERE student_id = ${query_counts}$"));
+                        query.push_str(&format!(" WHERE student_id = ${query_counts}"));
                     }
 
                     query_counts += 1;
@@ -133,9 +133,9 @@ impl ClubRequestTable {
                     i64_params.push(year);
 
                     if query.contains("WHERE") {
-                        query.push_str(&format!(" AND year = ${query_counts}$"));
+                        query.push_str(&format!(" AND year = ${query_counts}"));
                     } else {
-                        query.push_str(&format!(" WHERE year = ${query_counts}$"));
+                        query.push_str(&format!(" WHERE year = ${query_counts}"));
                     }
 
                     query_counts += 1;
@@ -145,9 +145,9 @@ impl ClubRequestTable {
                     submission_status_params.push(membership_status);
 
                     if query.contains("WHERE") {
-                        query.push_str(&format!(" AND membership_status = ${query_counts}$"));
+                        query.push_str(&format!(" AND membership_status = ${query_counts}"));
                     } else {
-                        query.push_str(&format!(" WHERE membership_status = ${query_counts}$"));
+                        query.push_str(&format!(" WHERE membership_status = ${query_counts}"));
                     }
 
                     query_counts += 1;
@@ -224,6 +224,8 @@ impl ClubRequestTable {
 
         let mut res = sqlx::query_as::<_, Self>(&query);
 
+        dbg!(&query);
+
         for uuid_param in uuid_params {
             res = res.bind(uuid_param);
         }
@@ -258,6 +260,7 @@ impl IdOnlyClubRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DefaultClubRequest {
     pub id: Uuid,
+    pub created_at: Option<DateTime<Utc>>,
     pub club: Club,
     pub student: Student,
     pub year: i64,
@@ -287,6 +290,7 @@ impl DefaultClubRequest {
 
         Ok(Self {
             id: table.id,
+            created_at: table.created_at,
             club,
             student,
             year: table.year,
@@ -357,53 +361,21 @@ impl ClubRequest {
             }
         };
 
-        match fetch_level {
-            FetchLevel::Default => {
-                let res = join_requests
-                    .into_iter()
-                    .map(|join_request| {
-                        Self::from_table(
-                            pool,
-                            join_request,
-                            request_params.descendant_fetch_level.clone(),
-                            Some(*fetch_level),
-                        )
-                    })
-                    .collect::<Result<Vec<Self>, sqlx::Error>>()
-                    .await?;
-                Ok(res)
-            }
-            FetchLevel::Compact => {
-                let res = join_requests
-                    .into_iter()
-                    .map(|join_request| {
-                        Self::from_table(
-                            pool,
-                            join_request,
-                            request_params.descendant_fetch_level.clone(),
-                            Some(*fetch_level),
-                        )
-                    })
-                    .collect::<Result<Vec<Self>, sqlx::Error>>()
-                    .await?;
-                Ok(res)
-            }
-            FetchLevel::IdOnly => {
-                let res = join_requests
-                    .into_iter()
-                    .map(|join_request| {
-                        Self::from_table(
-                            pool,
-                            join_request,
-                            request_params.descendant_fetch_level.clone(),
-                            Some(*fetch_level),
-                        )
-                    })
-                    .collect::<Result<Vec<Self>, sqlx::Error>>()
-                    .await?;
-                Ok(res)
-            }
+        let mut res = Vec::new();
+
+        for join_request in join_requests {
+            res.push(
+                Self::from_table(
+                    pool,
+                    join_request,
+                    request_params.descendant_fetch_level.clone(),
+                    Some(fetch_level.clone()),
+                )
+                .await?,
+            );
         }
+
+        Ok(res)
     }
 }
 
