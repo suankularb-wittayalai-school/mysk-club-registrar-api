@@ -328,12 +328,12 @@ impl ClubRequest {
     pub async fn get_by_id(
         pool: &sqlx::PgPool,
         id: Uuid,
-        descendent_fetch_level: Option<FetchLevel>,
         fetch_level: Option<FetchLevel>,
+        descendent_fetch_level: Option<FetchLevel>,
     ) -> Result<Self, sqlx::Error> {
         let table = sqlx::query_as::<_, ClubRequestTable>(
             r#"
-            SELECT * FROM club_requests WHERE id = $1
+            SELECT * FROM club_members WHERE id = $1
             "#,
         )
         .bind(id)
