@@ -41,12 +41,12 @@ async fn main() -> std::io::Result<()> {
         }
     };
 
-    let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+    // let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
 
-    builder
-        .set_private_key_file("ssl/privkey.pem", SslFiletype::PEM)
-        .unwrap();
-    builder.set_certificate_chain_file("ssl/cert.pem").unwrap();
+    // builder
+    //     .set_private_key_file("ssl/privkey.pem", SslFiletype::PEM)
+    //     .unwrap();
+    // builder.set_certificate_chain_file("ssl/cert.pem").unwrap();
 
     println!("🚀 Server started successfully");
 
@@ -71,7 +71,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .wrap(Logger::default())
     })
-    .bind_openssl(("0.0.0.0", 4430), builder)?
+    // .bind_openssl(("0.0.0.0", 4430), builder)?
     .bind(("0.0.0.0", 8000))?
     .run()
     .await

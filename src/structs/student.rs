@@ -314,6 +314,10 @@ impl DefaultStudent {
             None => None,
         };
 
+        // console.logs
+
+        dbg!(&student);
+
         Ok(Self {
             id: student.id as u32,
             prefix: MultiLangString {
