@@ -3,6 +3,7 @@ FROM rust:latest as build
 WORKDIR /usr/src/app
 COPY . .
 
+RUN echo DATABASE_URL=$DATABASE_URL
 RUN echo DATABASE_URL=$DATABASE_URL >> .env
 RUN echo JWT_SECRET=$JWT_SECRET >> .env
 # COPY .env.docker .env
